@@ -1,0 +1,9 @@
+{
+  "_readme": "Official Yamaha photos for the catalogue, stock thumbnails and customer showcase. Put licensed image files in this folder (or use full https:// URLs) and list them here by model id, then by colour name exactly as it appears in the app. Use \"*\" for photos that suit every colour. Photos an Admin uploads in the Catalogue Manager take priority over these. Example: \"mt15-v2\": { \"Racing Blue\": [\"/images/catalogue/mt15-v2-racing-blue.webp\"], \"*\": [\"/images/catalogue/mt15-v2-studio.webp\"] }. Model ids: mt15-v2, r15, aerox-155, fzs-fi-v4, fz-x, rayzr-125, fascino-125.",
+  "_example_disabled": {
+    "mt15-v2": {
+      "Racing Blue": [],
+      "*": []
+    }
+  }
+}
