@@ -11,18 +11,19 @@ export interface PhotoSet {
 }
 
 const DB = "vijayagiri";
-const VERSION = 3;
+const VERSION = 4;
 const PHOTO_SETS = "photo-sets";
 const CATALOGUE_MEDIA = "catalogue-media";
 const POLICY_DOCS = "policy-docs";
+const CLAIM_FILES = "claim-files";
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") return reject(new Error("IndexedDB unavailable"));
     const req = indexedDB.open(DB, VERSION);
     req.onupgradeneeded = () => {
-      // v1 only had the stock photo sets; v2 added the catalogue's photos and brochures; v3 adds insurance policy PDFs.
-      for (const name of [PHOTO_SETS, CATALOGUE_MEDIA, POLICY_DOCS]) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name, { keyPath: "id" });
+      // v1 only had the stock photo sets; v2 added the catalogue's photos and brochures; v3 adds insurance policy PDFs; v4 adds claim files.
+      for (const name of [PHOTO_SETS, CATALOGUE_MEDIA, POLICY_DOCS, CLAIM_FILES]) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -101,3 +102,14 @@ export interface PolicyDoc {
 export const savePolicyDoc = (doc: PolicyDoc) => put(POLICY_DOCS, doc);
 export const loadPolicyDoc = (id: string) => getOne<PolicyDoc>(POLICY_DOCS, id);
 export const deletePolicyDoc = (id: string) => del(POLICY_DOCS, id);
+
+/** A file attached to a claim (survey report, ramp photo), keyed `${claimId}:${slot}`. */
+export interface ClaimFileBlob {
+  id: string;
+  name: string;
+  size: number;
+  blob: Blob;
+}
+export const saveClaimFile = (doc: ClaimFileBlob) => put(CLAIM_FILES, doc);
+export const loadClaimFile = (id: string) => getOne<ClaimFileBlob>(CLAIM_FILES, id);
+export const deleteClaimFile = (id: string) => del(CLAIM_FILES, id);
