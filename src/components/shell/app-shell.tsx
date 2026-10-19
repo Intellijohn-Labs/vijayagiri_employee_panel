@@ -9,11 +9,13 @@ import { useStock } from "@/store/stock-store";
 import { useBranchStore } from "@/store/branch-store";
 import { useCatalogue } from "@/store/catalogue-store";
 import { useInsurance } from "@/store/insurance-store";
+import { useClaims } from "@/store/claims-store";
 import { useSettings } from "@/store/settings-store";
 import { useOfficialImages } from "@/lib/official-images";
 import { toast } from "@/store/toast-store";
 import { canAccess, useEmployees, useSessionEmployee } from "@/store/employee-store";
 import { Toaster } from "@/components/ui/toaster";
+import { ClaimsWatcher } from "@/components/claims/watcher";
 import { spring } from "@/lib/motion";
 import { watermarkMask } from "@/components/auth/auth-kit";
 import { Sidebar } from "./sidebar";
@@ -42,6 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hydrateEmployees = useEmployees((s) => s.hydrate);
   const hydrateCatalogue = useCatalogue((s) => s.hydrate);
   const hydrateInsurance = useInsurance((s) => s.hydrate);
+  const hydrateClaims = useClaims((s) => s.hydrate);
   const hydrateSettings = useSettings((s) => s.hydrate);
   const loadOfficial = useOfficialImages((s) => s.load);
   const officialLoaded = useOfficialImages((s) => s.loaded);
@@ -61,9 +64,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     hydrateEmployees();
     hydrateCatalogue();
     hydrateInsurance();
+    hydrateClaims();
     hydrateSettings();
     loadOfficial();
-  }, [hydrateTheme, init, hydrateStock, hydrateBranches, hydrateEmployees, hydrateCatalogue, hydrateInsurance, hydrateSettings, loadOfficial]);
+  }, [hydrateTheme, init, hydrateStock, hydrateBranches, hydrateEmployees, hydrateCatalogue, hydrateInsurance, hydrateClaims, hydrateSettings, loadOfficial]);
 
   // Strict access: no session, a removed employee, or a deactivated one all end up back at the sign-in screen.
   const signedIn = !!me && me.status === "Active";
@@ -142,6 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </div>
+      {signedIn && <ClaimsWatcher />}
       <Toaster />
     </MotionConfig>
   );

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookImage, Boxes, Building2, MonitorPlay, PackagePlus, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Users, X } from "lucide-react";
+import { BookImage, Boxes, Building2, MonitorPlay, PackagePlus, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Users, Wrench, X } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useSessionEmployee } from "@/store/employee-store";
 import { useIsDesktop } from "@/lib/hooks";
@@ -19,6 +19,7 @@ export const NAV = [
   { href: "/stock/add", label: "Add Stock", icon: PackagePlus, group: "Workspace" },
   { href: "/catalogue/explore", label: "Customer Showcase", icon: MonitorPlay, group: "Workspace" },
   { href: "/insurance", label: "Insurance Hub", icon: ShieldCheck, group: "Operations" },
+  { href: "/claims", label: "Claims & Workshop", icon: Wrench, group: "Operations" },
   { href: "/employees", label: "Employees", icon: Users, adminOnly: true, group: "Management" },
   { href: "/catalogue/manage", label: "Catalogue Manager", icon: BookImage, adminOnly: true, group: "Management" },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true, group: "System" },
