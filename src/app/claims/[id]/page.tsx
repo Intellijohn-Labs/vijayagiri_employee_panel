@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, SearchX, TriangleAlert } from "lucide-react";
 import { useBranch } from "@/store/branch-store";
@@ -42,14 +42,12 @@ function ClaimView({ claim }: { claim: Claim }) {
   const branch = useBranch(claim.branchId);
   const now = useClock();
   const sla = useSla(claim);
-  const [picked, setPicked] = useState<StageNo | null>(null);
-
-  // Moving the claim on brings the view back to the stage in progress.
-  const closed = !!claim.closedAt;
-  useEffect(() => setPicked(null), [claim.stage, closed]);
+  // A stage picked in the stepper only holds while the claim stays where it is; moving on brings the view back to the stage in progress.
+  const progress = `${claim.stage}:${!!claim.closedAt}`;
+  const [picked, setPicked] = useState<{ progress: string; stage: StageNo } | null>(null);
 
   const health = healthOf(claim, now);
-  const viewing = picked ?? claim.stage;
+  const viewing = picked?.progress === progress ? picked.stage : claim.stage;
   const def = stageDef(viewing);
   const breached = health === "breach";
 
@@ -87,7 +85,7 @@ function ClaimView({ claim }: { claim: Claim }) {
       ) : null}
 
       <div className="mb-5">
-        <Stepper claim={claim} viewing={viewing} onView={setPicked} />
+        <Stepper claim={claim} viewing={viewing} onView={(stage) => setPicked({ progress, stage })} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
@@ -123,8 +121,8 @@ function ClaimView({ claim }: { claim: Claim }) {
           <Card className="p-4">
             <h3 className="mb-3 text-[13px] font-semibold text-fg">Activity</h3>
             <ol className="space-y-3">
-              {claim.events.slice(0, 12).map((e, i) => (
-                <li key={`${e.at}-${i}`} className="flex gap-2.5">
+              {claim.events.slice(0, 12).map((e) => (
+                <li key={`${e.at}-${e.text}`} className="flex gap-2.5">
                   <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", TONE_DOT[e.tone])} />
                   <div className="min-w-0">
                     <p className={cn("text-[12.5px] leading-5", e.tone === "danger" ? "font-medium text-danger" : "text-fg")}>{e.text}</p>

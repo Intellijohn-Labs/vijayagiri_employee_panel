@@ -12,10 +12,11 @@ export function Stepper({ claim, viewing, onView }: { claim: Claim; viewing: Sta
   const health = healthOf(claim, now);
   const list = useRef<HTMLOListElement>(null);
   // On narrow screens the strip scrolls; keep the stage in progress in view.
+  const stage = claim.closedAt ? 10 : claim.stage;
   useEffect(() => {
-    const el = list.current?.querySelector<HTMLElement>("[aria-current=step]") ?? (list.current?.lastElementChild as HTMLElement | null | undefined);
+    const el = list.current?.querySelector<HTMLElement>(`[data-step="${stage}"]`);
     if (list.current && el) list.current.scrollTo({ left: Math.max(0, el.offsetLeft - list.current.clientWidth / 2 + el.clientWidth / 2) });
-  }, [claim.stage, claim.closedAt]);
+  }, [stage]);
   return (
     <ol ref={list} className="relative -mx-4 flex gap-2 overflow-x-auto px-4 pb-2 sm:-mx-0 sm:px-0" aria-label="Claim stages">
       {STAGES.map((st) => {
@@ -24,7 +25,7 @@ export function Stepper({ claim, viewing, onView }: { claim: Claim; viewing: Sta
         const upcoming = !done && !current;
         const log = claim.stageLog[st.no];
         return (
-          <li key={st.no} className="min-w-[104px] flex-1">
+          <li key={st.no} data-step={st.no} className="min-w-[104px] flex-1">
             <button
               type="button"
               disabled={upcoming}

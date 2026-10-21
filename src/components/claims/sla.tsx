@@ -16,7 +16,7 @@ const subscribe = (fn: () => void) => {
     current = Date.now();
     timer = setInterval(() => {
       current = Date.now();
-      listeners.forEach((l) => l());
+      for (const l of listeners) l();
     }, 1000);
   }
   return () => {

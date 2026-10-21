@@ -105,7 +105,7 @@ function FilePicker({ claim, slot, file, label, accept, image, readOnly }: { cla
         {image && (
           <div className="grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-hover text-faint">
             {url ? (
-              // eslint-disable-next-line @next/next/no-img-element
+              // biome-ignore lint/performance/noImgElement: a blob: preview URL, which next/image cannot load
               <img src={url} alt={`${label} preview`} className="h-full w-full object-cover" />
             ) : (
               <Camera className="h-5 w-5" />
@@ -129,7 +129,11 @@ function FilePicker({ claim, slot, file, label, accept, image, readOnly }: { cla
           )}
         </div>
       </div>
-      <input ref={input} type="file" accept={accept} className="sr-only" tabIndex={-1} onChange={(e) => (pick(e.target.files?.[0]), (e.target.value = ""))} />
+      <input ref={input} type="file" accept={accept} className="sr-only" tabIndex={-1} onChange={(e) => {
+          pick(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
@@ -308,24 +312,22 @@ function Stage4({ claim, readOnly }: PanelProps) {
           <FilePicker claim={claim} slot="survey" file={claim.survey.report} label="Survey report" accept="application/pdf,image/*" readOnly={readOnly} />
         </Section>
         <Section title="Report approval">
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Report approval">
+          <fieldset className="flex flex-wrap gap-2">
+            <legend className="sr-only">Report approval</legend>
             {APPROVALS.map((a) => (
-              <button
+              <label
                 key={a}
-                type="button"
-                role="radio"
-                aria-checked={s.approval === a}
-                disabled={readOnly}
-                onClick={() => setS({ ...s, approval: a })}
                 className={cn(
-                  "h-8 rounded-md border px-3 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/50 disabled:cursor-not-allowed",
+                  "inline-flex h-8 cursor-pointer items-center rounded-md border px-3 text-[13px] font-medium transition-colors focus-within:ring-2 focus-within:ring-blue-500/50",
+                  readOnly && "cursor-not-allowed",
                   s.approval === a ? (a === "Approved" ? "border-ok/40 bg-ok-tint text-ok" : a === "Rejected" ? "border-danger/40 bg-danger-tint text-danger" : "border-warn/40 bg-warn-tint text-warn") : "border-line bg-surface text-muted hover:bg-hover",
                 )}
               >
+                <input type="radio" name="survey-approval" className="sr-only" checked={s.approval === a} disabled={readOnly} onChange={() => setS({ ...s, approval: a })} />
                 {a}
-              </button>
+              </label>
             ))}
-          </div>
+          </fieldset>
         </Section>
       </div>
       {!readOnly && (
@@ -574,10 +576,10 @@ function Stage9({ claim, readOnly }: PanelProps) {
         <Field label="Payment reference" hint="UPI / cash / cheque">
           <Input value={f.paymentRef} onChange={(e) => setF({ ...f, paymentRef: e.target.value })} disabled={readOnly} />
         </Field>
-        <label className="flex h-9 items-center gap-2.5 text-[13px] text-fg">
+        <div className="flex h-9 items-center gap-2.5 text-[13px] text-fg">
           {readOnly ? <Checkbox checked={f.paid} onChange={() => undefined} label="Balance collected" className="pointer-events-none" /> : <Checkbox checked={f.paid} onChange={(v) => setF({ ...f, paid: v })} label="Balance collected" />}
-          {payable > 0 ? `Customer balance of ${formatINR(payable)} collected` : "No balance to collect"}
-        </label>
+          <span>{payable > 0 ? `Customer balance of ${formatINR(payable)} collected` : "No balance to collect"}</span>
+        </div>
       </div>
       {!readOnly && (
         <Footer missing={missing}>
@@ -593,7 +595,7 @@ function Stage9({ claim, readOnly }: PanelProps) {
 
 /* ───────── Stage 10 · Approval & handover ───────── */
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }) as Record<string, string>)[c] ?? c);
 
 function printGatepass(c: Claim, showroom: string) {
   const w = window.open("", "_blank", "width=720,height=800");
