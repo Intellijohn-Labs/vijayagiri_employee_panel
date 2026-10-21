@@ -1,0 +1,38 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+	"files": { "includes": ["src/**", "*.ts", "*.mjs"] },
+	"css": { "parser": { "tailwindDirectives": true } },
+	"linter": {
+		"enabled": true,
+		"domains": { "next": "recommended", "react": "recommended" },
+		"rules": {
+			"preset": "recommended",
+			"a11y": {
+				"useButtonType": "warn",
+				"useSemanticElements": "warn",
+				"noLabelWithoutControl": "warn",
+				"noAutofocus": "warn",
+				"noStaticElementInteractions": "warn",
+				"useKeyWithClickEvents": "warn",
+				"noRedundantAlt": "warn",
+				"useAriaPropsSupportedByRole": "warn",
+				"noSvgWithoutTitle": "warn",
+				"noNoninteractiveElementToInteractiveRole": "warn"
+			},
+			"suspicious": {
+				"noArrayIndexKey": "warn",
+				"useIterableCallbackReturn": "warn",
+				"noAssignInExpressions": "warn"
+			},
+			"correctness": { "useExhaustiveDependencies": "warn" },
+			"security": { "noDangerouslySetInnerHtml": "warn" }
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.css"],
+			"linter": { "rules": { "suspicious": { "noUnknownAtRules": "off" } } }
+		}
+	]
+}

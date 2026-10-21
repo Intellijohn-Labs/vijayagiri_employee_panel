@@ -97,11 +97,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       timer = setTimeout(expire, sessionMinutes * 60_000);
     };
     const events = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
-    events.forEach((e) => window.addEventListener(e, arm, { passive: true }));
+    for (const e of events) window.addEventListener(e, arm, { passive: true });
     arm();
     return () => {
       clearTimeout(timer);
-      events.forEach((e) => window.removeEventListener(e, arm));
+      for (const e of events) window.removeEventListener(e, arm);
     };
   }, [timedOut, sessionMinutes, signOut]);
 
