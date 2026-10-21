@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
+import { memo, useMemo } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, CheckCircle2, MessageSquarePlus, Phone, Siren, TriangleAlert } from "lucide-react";
 import { useBranchTools } from "@/store/branch-store";
@@ -11,20 +10,21 @@ import { toast } from "@/store/toast-store";
 import { branchLabel } from "@/lib/branches";
 import { fmtDateTime, formatSpan, slaFor, stageDef, type Claim, type SlaState } from "@/lib/claims";
 import { cn } from "@/lib/utils";
-import { fadeUp, spring, stagger } from "@/lib/motion";
+import { cardIn, springFirm } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Card, PageHeader } from "@/components/ui/primitives";
-import { FilterBar, useRemarkDrawer } from "@/components/claims/cards";
+import { FilterBar, cardGlow, cardShell, useRemarkDrawer } from "@/components/claims/cards";
 import { useClock } from "@/components/claims/sla";
 import { matchesFilters, useClaimStats } from "@/components/claims/stats";
-import { Fact, secondaryLinkClass } from "@/components/claims/ui";
+import { Fact, TapAnchor, TapLink, secondaryLinkClass } from "@/components/claims/ui";
+import { BikeThumb, PlateBadge } from "@/components/claims/vehicle";
 import { ClaimsActions } from "@/components/claims/workspace";
 
 type Row = { claim: Claim; sla: SlaState };
 
 const digits = (p: string) => p.replace(/\D/g, "");
 
-function AlertCard({ row, onRemark }: { row: Row; onRemark: (c: Claim) => void }) {
+const AlertCard = memo(function AlertCard({ row, index, onRemark }: { row: Row; index: number; onRemark: (c: Claim) => void }) {
   const { byId } = useBranchTools();
   const escalate = useClaims((s) => s.escalate);
   const { claim: c, sla } = row;
@@ -33,8 +33,8 @@ function AlertCard({ row, onRemark }: { row: Row; onRemark: (c: Claim) => void }
   const escalated = c.escalations.includes(`${sla.key}:manual`);
 
   return (
-    <motion.li layout variants={fadeUp} transition={spring}>
-      <article className={cn("overflow-hidden rounded-xl border shadow-card", sla.topManagement ? "border-danger bg-danger-tint ring-2 ring-danger/40" : "border-danger/40 bg-surface")}>
+    <motion.li custom={index} variants={cardIn}>
+      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("overflow-hidden", cardShell, cardGlow.breach, sla.topManagement && "ring-2 ring-danger/40")}>
         <div className="flex flex-wrap items-center gap-2 border-b border-danger/20 bg-danger px-4 py-2 text-white">
           <Siren className="h-4 w-4 animate-pulse" />
           <span className="text-[12px] font-bold tracking-wide">{sla.topManagement ? "TOP MANAGEMENT RED ALERT" : "OVERDUE"}</span>
@@ -63,24 +63,29 @@ function AlertCard({ row, onRemark }: { row: Row; onRemark: (c: Claim) => void }
               <span className="block text-[12px] text-muted">{c.phone}</span>
             </Fact>
             <Fact label="Vehicle">
-              {c.model}
-              <span className="block font-mono text-[12px] text-muted">{c.regNo}</span>
+              <span className="flex items-center gap-2.5">
+                <BikeThumb model={c.model} className="h-9 w-14" />
+                <span className="min-w-0">
+                  <span className="block truncate">{c.model}</span>
+                  <PlateBadge regNo={c.regNo} className="mt-0.5" />
+                </span>
+              </span>
             </Fact>
             <Fact label="Insurer">{c.insurer}</Fact>
           </dl>
         </div>
 
         <div className="flex flex-wrap gap-2 border-t border-line px-4 py-3">
-          <Link href={`/claims/${c.id}`} className="inline-flex h-8 items-center gap-2 rounded-md bg-danger px-3 text-[13px] font-medium text-white outline-none hover:opacity-90 focus-visible:shadow-ring">
+          <TapLink href={`/claims/${c.id}`} className="inline-flex h-8 items-center gap-2 rounded-md bg-danger px-3 text-[13px] font-medium text-white outline-none transition-opacity hover:opacity-90 focus-visible:shadow-ring">
             Open claim <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-          <a href={`tel:+${digits(c.phone).length === 10 ? "91" : ""}${digits(c.phone)}`} className={secondaryLinkClass}>
+          </TapLink>
+          <TapAnchor href={`tel:+${digits(c.phone).length === 10 ? "91" : ""}${digits(c.phone)}`} className={secondaryLinkClass}>
             <Phone className="h-3.5 w-3.5" /> Call customer
-          </a>
+          </TapAnchor>
           {branch?.dial ? (
-            <a href={`tel:${branch.dial}`} className={secondaryLinkClass}>
+            <TapAnchor href={`tel:${branch.dial}`} className={secondaryLinkClass}>
               <Phone className="h-3.5 w-3.5" /> Call branch
-            </a>
+            </TapAnchor>
           ) : (
             <Button disabled title="No branch number on file yet" leading={<Phone className="h-3.5 w-3.5" />}>
               Call branch
@@ -103,10 +108,10 @@ function AlertCard({ row, onRemark }: { row: Row; onRemark: (c: Claim) => void }
             Add Remarks
           </Button>
         </div>
-      </article>
+      </motion.article>
     </motion.li>
   );
-}
+});
 
 export default function CodeRedPage() {
   const stats = useClaimStats();
@@ -159,9 +164,9 @@ export default function CodeRedPage() {
           <p className="mt-1 max-w-sm text-[13px] text-muted">{stats.breachCount ? `${stats.breachCount} overdue claim${stats.breachCount === 1 ? " is" : "s are"} hidden by the search or showroom filter.` : "Every running timer is within its deadline."}</p>
         </Card>
       ) : (
-        <motion.ul variants={stagger(0.04)} initial="hidden" animate="show" className="space-y-4">
-          {rows.map((r) => (
-            <AlertCard key={`${r.claim.id}:${r.sla.key}`} row={r} onRemark={remarks.open} />
+        <motion.ul initial="hidden" animate="show" className="space-y-4">
+          {rows.map((r, i) => (
+            <AlertCard key={`${r.claim.id}:${r.sla.key}`} row={r} index={i} onRemark={remarks.open} />
           ))}
         </motion.ul>
       )}

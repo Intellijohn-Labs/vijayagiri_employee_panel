@@ -2,9 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import { AlertOctagon, CheckCircle2, Clock, Siren } from "lucide-react";
-import { HEALTH_LABEL, formatSpan, slaFor, type Claim, type Health, type SlaState } from "@/lib/claims";
+import { HEALTH_LABEL, formatSpan, healthOf, slaFor, type Claim, type Health, type SlaState } from "@/lib/claims";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/primitives";
 
 /* One shared 1-second clock for every countdown on screen. */
 let current = Date.now();
@@ -30,17 +29,45 @@ const subscribe = (fn: () => void) => {
 /** Milliseconds since epoch, refreshed every second while anything is subscribed. */
 export const useClock = () => useSyncExternalStore(subscribe, () => current, () => current);
 
-export const TONE: Record<Health, "ok" | "warn" | "danger" | "accent"> = { ok: "ok", warn: "warn", breach: "danger", done: "accent" };
-
 export const TEXT: Record<Health, string> = { ok: "text-ok", warn: "text-warn", breach: "text-danger", done: "text-accent-text" };
 export const BAR: Record<Health, string> = { ok: "bg-ok", warn: "bg-warn", breach: "bg-danger", done: "bg-accent" };
 
-/** Green / Yellow / Red badge for a claim's current standing. */
-export function HealthBadge({ health, className }: { health: Health; className?: string }) {
+const PILL: Record<Health, string> = {
+  ok: "bg-ok-tint text-ok ring-ok/25",
+  warn: "bg-warn-tint text-warn ring-warn/25",
+  breach: "bg-danger-tint text-danger ring-danger/30",
+  done: "bg-tint text-accent-text ring-accent/20",
+};
+
+/** A status dot that pings: fast for Overdue, slower for Approaching, a slow heartbeat for On Track. Compositor-only, off for reduced motion. */
+export function PulseDot({ health }: { health: Health }) {
   return (
-    <Badge tone={TONE[health]} dot className={cn(health === "breach" && "[&>span:first-child]:animate-pulse", className)}>
-      {HEALTH_LABEL[health]}
-    </Badge>
+    <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+      {health !== "done" && <span className={cn("absolute inset-0 animate-ping rounded-full bg-current opacity-60 motion-reduce:hidden", health === "breach" ? "[animation-duration:1s]" : health === "warn" ? "[animation-duration:1.6s]" : "[animation-duration:2.4s]")} />}
+      <span className="relative h-2 w-2 rounded-full bg-current" />
+    </span>
+  );
+}
+
+/** Green / Amber / Red status pill with a pulsing dot. Delivered claims read "Delivered" unless `full`. */
+export function HealthBadge({ health, full, className }: { health: Health; full?: boolean; className?: string }) {
+  return (
+    <span className={cn("inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[11px] font-medium ring-1 ring-inset", PILL[health], className)}>
+      <PulseDot health={health} />
+      {health === "done" && !full ? "Delivered" : HEALTH_LABEL[health]}
+    </span>
+  );
+}
+
+/**
+ * A claim's standing as a plain string, so a component only re-renders when it actually changes
+ * (On Track to Approaching to Overdue) instead of on every tick of the clock.
+ */
+export function useClaimHealth(claim: Claim): Health {
+  return useSyncExternalStore(
+    subscribe,
+    () => healthOf(claim, current),
+    () => healthOf(claim, current),
   );
 }
 

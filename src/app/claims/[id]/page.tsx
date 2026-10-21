@@ -61,7 +61,7 @@ function ClaimView({ claim }: { claim: Claim }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="font-mono text-xl font-semibold tracking-tight text-fg">{claim.claimNo || claim.ref}</h1>
-            <HealthBadge health={health} />
+            <HealthBadge health={health} full />
           </div>
           <p className="mt-1 text-[13px] text-muted">
             {claim.customerName} · {claim.model} · <span className="font-mono">{claim.regNo}</span> · {branch?.short ?? claim.branchId}

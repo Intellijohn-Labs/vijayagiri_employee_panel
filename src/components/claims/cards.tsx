@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { memo, useCallback, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, MessageSquarePlus, Phone, Search, Siren } from "lucide-react";
@@ -9,15 +9,16 @@ import { useClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
 import { toast } from "@/store/toast-store";
 import { branchLabel } from "@/lib/branches";
-import { fmtDateTime, healthOf, slaFor, stageDef, type Claim } from "@/lib/claims";
+import { fmtDateTime, slaFor, stageDef, type Claim, type Health } from "@/lib/claims";
 import { cn } from "@/lib/utils";
-import { fadeUp, spring, stagger } from "@/lib/motion";
+import { cardIn, springFirm } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/overlay";
 import { Select } from "@/components/ui/popover";
 import { Input, Textarea } from "@/components/ui/primitives";
-import { HealthBadge, SlaChip, useClock } from "./sla";
-import { secondaryLinkClass } from "./ui";
+import { HealthBadge, SlaChip, useClaimHealth } from "./sla";
+import { TapLink, secondaryLinkClass } from "./ui";
+import { BikeThumb, PlateBadge } from "./vehicle";
 
 const telHref = (phone: string) => `tel:+${phone.replace(/\D/g, "").replace(/^(\d{10})$/, "91$1")}`;
 const latestRemark = (c: Claim) => c.events.filter((e) => e.kind === "remark").sort((a, z) => z.at - a.at)[0];
@@ -72,22 +73,40 @@ export function useRemarkDrawer() {
       </div>
     </Drawer>
   );
-  return { open: (c: Claim) => setId(c.id), drawer };
+  // Stable, so memoised cards that receive it are not re-rendered when the drawer state changes.
+  const open = useCallback((c: Claim) => setId(c.id), []);
+  return { open, drawer };
 }
 
 /* ───────── Vehicle card ───────── */
 
-/** One vehicle: who, what, where, how late, and what you can do about it. */
-export function VehicleCard({ claim, onRemark, showStage }: { claim: Claim; onRemark: (c: Claim) => void; showStage?: boolean }) {
+/** Border and glow per status; the glow takes the status colour on hover and keyboard focus. Written out in full so Tailwind sees every class. */
+const SURFACE: Record<Health, string> = {
+  ok: "border-line hover:border-accent/50 focus-within:border-accent/50 hover:shadow-[0_10px_28px_-10px_rgb(var(--accent)/0.4)] focus-within:shadow-[0_10px_28px_-10px_rgb(var(--accent)/0.4)]",
+  done: "border-line hover:border-accent/50 focus-within:border-accent/50 hover:shadow-[0_10px_28px_-10px_rgb(var(--accent)/0.4)] focus-within:shadow-[0_10px_28px_-10px_rgb(var(--accent)/0.4)]",
+  warn: "border-warn/40 hover:border-warn/70 focus-within:border-warn/70 hover:shadow-[0_10px_28px_-10px_rgb(var(--warn)/0.45)] focus-within:shadow-[0_10px_28px_-10px_rgb(var(--warn)/0.45)]",
+  breach: "border-danger/50 bg-danger-tint hover:border-danger focus-within:border-danger hover:shadow-[0_10px_28px_-10px_rgb(var(--danger)/0.5)] focus-within:shadow-[0_10px_28px_-10px_rgb(var(--danger)/0.5)]",
+};
+
+/** The shell every claim card shares: glassy border, soft shadow that deepens on hover, a small lift. */
+export const cardShell = "transform-gpu rounded-2xl border bg-surface/90 shadow-sm ring-1 ring-inset ring-white/60 transition-[box-shadow,border-color] duration-200 hover:shadow-md focus-within:shadow-md dark:ring-white/[0.04]";
+export { SURFACE as cardGlow };
+
+/**
+ * One vehicle: who, what, where, how late, and what you can do about it.
+ * Memoised, and it reads its status through `useClaimHealth`, so it re-renders when something about the claim
+ * changes or its status flips, not on every tick of the clock (only the small timer chip does that).
+ */
+export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, showStage }: { claim: Claim; index: number; onRemark: (c: Claim) => void; showStage?: boolean }) {
   const { byId } = useBranchTools();
   const complete = useClaims((s) => s.complete);
-  const now = useClock();
-  const health = healthOf(claim, now);
-  const sla = slaFor(claim, now);
+  const health = useClaimHealth(claim);
+  // Which timer applies doesn't depend on the time, only whether it has run out.
+  const phase = slaFor(claim, 0);
   const branch = byId(claim.branchId);
   const remark = latestRemark(claim);
   const st = stageDef(claim.stage);
-  const top = !!sla?.topManagement && health === "breach";
+  const top = !!phase?.topManagement && health === "breach";
 
   const advance = () => {
     const r = complete(claim.id);
@@ -96,13 +115,8 @@ export function VehicleCard({ claim, onRemark, showStage }: { claim: Claim; onRe
   };
 
   return (
-    <motion.li layout variants={fadeUp} transition={spring} className="min-w-0">
-      <article
-        className={cn(
-          "flex h-full flex-col rounded-xl border bg-surface p-4 shadow-card transition-colors",
-          health === "breach" ? "border-danger/50 bg-danger-tint ring-1 ring-danger/30" : health === "warn" ? "border-warn/40" : "border-line",
-        )}
-      >
+    <motion.li custom={index} variants={cardIn} className="min-w-0">
+      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("flex h-full flex-col p-4", cardShell, SURFACE[health])}>
         <header className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate font-mono text-[12px] text-muted">{claim.claimNo || claim.ref}</p>
@@ -111,18 +125,24 @@ export function VehicleCard({ claim, onRemark, showStage }: { claim: Claim; onRe
           <HealthBadge health={health} />
         </header>
 
-        <h3 className="mt-2 truncate text-[15px] font-semibold text-fg">{claim.customerName}</h3>
-        <a href={telHref(claim.phone)} className="mt-0.5 inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted outline-none hover:text-fg focus-visible:underline">
-          <Phone className="h-3 w-3" /> {claim.phone}
-        </a>
+        <div className="mt-3 flex items-center gap-3">
+          <BikeThumb model={claim.model} />
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold leading-5 text-fg">{claim.customerName}</h3>
+            <a href={telHref(claim.phone)} className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted outline-none hover:text-fg focus-visible:underline">
+              <Phone className="h-3 w-3" /> {claim.phone}
+            </a>
+          </div>
+        </div>
 
-        <p className="mt-2.5 truncate text-[13px] text-fg">
-          {claim.model} · <span className="font-mono">{claim.regNo}</span>
-        </p>
-        <p className="truncate text-[12px] text-muted">{branch ? branchLabel(branch) : claim.branchId}</p>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-[13px] font-medium text-fg">{claim.model}</p>
+          <PlateBadge regNo={claim.regNo} />
+        </div>
+        <p className="mt-0.5 truncate text-[12px] text-muted">{branch ? branchLabel(branch) : claim.branchId}</p>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-line bg-hover/60 px-3 py-2">
-          <span className="text-[11.5px] text-muted">{claim.closedAt ? "Closed" : (sla?.label ?? "No SLA timer on this stage")}</span>
+          <span className="text-[11.5px] text-muted">{claim.closedAt ? "Closed" : (phase?.label ?? "No SLA timer on this stage")}</span>
           <SlaChip claim={claim} />
         </div>
         {top && (
@@ -135,35 +155,35 @@ export function VehicleCard({ claim, onRemark, showStage }: { claim: Claim; onRe
         <footer className="mt-auto flex flex-wrap gap-2 pt-4">
           {!claim.closedAt &&
             (claim.stage === 10 ? (
-              <Link href={`/claims/${claim.id}`} className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2.5 text-xs font-medium text-accent-fg outline-none hover:bg-accent-hover focus-visible:shadow-ring">
+              <TapLink href={`/claims/${claim.id}`} className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2.5 text-xs font-medium text-accent-fg outline-none transition-colors hover:bg-accent-hover focus-visible:shadow-ring">
                 Approve & hand over <ArrowRight className="h-3 w-3" />
-              </Link>
+              </TapLink>
             ) : (
               <Button size="sm" variant="primary" onClick={advance} trailing={<ArrowRight className="h-3 w-3" />}>
                 Move to Next Stage
               </Button>
             ))}
-          <Link href={`/claims/${claim.id}`} className={cn(secondaryLinkClass, "h-7 rounded-md px-2.5 text-xs")}>
+          <TapLink href={`/claims/${claim.id}`} className={cn(secondaryLinkClass, "h-7 rounded-md px-2.5 text-xs")}>
             View Details
-          </Link>
+          </TapLink>
           <Button size="sm" variant="ghost" leading={<MessageSquarePlus className="h-3 w-3" />} onClick={() => onRemark(claim)}>
             Add Remarks
           </Button>
         </footer>
-      </article>
+      </motion.article>
     </motion.li>
   );
-}
+});
 
-/** Responsive grid of vehicle cards with the shared remark drawer. */
+/** Responsive grid of vehicle cards with the shared remark drawer. Cards stagger in whenever the stage (or the list) changes. */
 export function CardGrid({ claims, showStage, empty }: { claims: Claim[]; showStage?: boolean; empty: ReactNode }) {
   const remarks = useRemarkDrawer();
   if (!claims.length) return <>{empty}</>;
   return (
     <>
-      <motion.ul variants={stagger(0.025)} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {claims.map((c) => (
-          <VehicleCard key={c.id} claim={c} showStage={showStage} onRemark={remarks.open} />
+      <motion.ul initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {claims.map((c, i) => (
+          <VehicleCard key={c.id} claim={c} index={i} showStage={showStage} onRemark={remarks.open} />
         ))}
       </motion.ul>
       {remarks.drawer}

@@ -1,7 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { springFirm } from "@/lib/motion";
 
 /** A Link that looks like the primary Button (the Button component renders a <button>, which can't navigate). */
 export const buttonLinkClass = "inline-flex h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-accent px-3 text-[13px] font-medium text-accent-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.18)] outline-none transition-[background-color,box-shadow] hover:bg-accent-hover focus-visible:shadow-ring";
@@ -29,4 +32,15 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
       {children}
     </section>
   );
+}
+
+const TapLinkBase = motion.create(Link);
+/** A Next Link with the same press feedback as Button. */
+export function TapLink(props: ComponentProps<typeof TapLinkBase>) {
+  return <TapLinkBase whileTap={{ scale: 0.98 }} transition={springFirm} {...props} />;
+}
+
+/** A plain anchor (tel:, mailto:) with the same press feedback as Button. */
+export function TapAnchor(props: ComponentProps<typeof motion.a>) {
+  return <motion.a whileTap={{ scale: 0.98 }} transition={springFirm} {...props} />;
 }
