@@ -27,6 +27,10 @@ interface ClaimsState {
   /** Apply `patch`, then move the claim to the next stage if everything the stage needs is in place. */
   complete: (id: string, patch?: Partial<Claim>) => CompleteResult;
   attachFile: (id: string, slot: FileSlot, file: File) => Promise<void>;
+  /** Staff note on a claim; shown on its card and in the activity log. */
+  addRemark: (id: string, text: string) => boolean;
+  /** Manually raise an overdue claim to Top Management (simulated notification). Once per timer. */
+  escalate: (id: string) => boolean;
   /** Stage 10: only the Branch Manager of the claim's branch may do this. */
   setApproval: (id: string, approved: boolean) => boolean;
   /** Stage 10: needs approval; marks the claim Delivered to Customer. */
@@ -92,9 +96,29 @@ export const useClaims = create<ClaimsState>((set, get) => {
     set: (id, patch) => edit(id, (c) => ({ ...c, ...patch })),
     log: (id, text, tone) => edit(id, (c) => ({ ...c, events: [ev(text, tone), ...c.events] })),
 
+    addRemark: (id, text) => {
+      const t = text.trim();
+      if (!t || !find(id)) return false;
+      edit(id, (c) => ({ ...c, events: [{ ...ev(`${myName()}: ${t}`), kind: "remark" as const }, ...c.events] }));
+      return true;
+    },
+
+    escalate: (id) => {
+      const c = find(id);
+      const s = c && slaFor(c, Date.now());
+      if (!c || !s || s.health !== "breach") return false;
+      const key = `${s.key}:manual`;
+      if (c.escalations.includes(key)) {
+        toast.info("Already escalated", "Top Management has already been alerted about this timer.");
+        return false;
+      }
+      edit(id, (x) => ({ ...x, escalations: [...x.escalations, key], events: [ev(`Escalated to Top Management by ${myName()} — ${s.label} overdue (simulated notification)`, "danger"), ...x.events] }));
+      return true;
+    },
+
     placeOrder: (id, orderNo, etaDays) => {
       const c = find(id);
-      if (!c || c.stage !== 5 || !orderNo.trim()) return false;
+      if (c?.stage !== 5 || !orderNo.trim()) return false;
       const now = Date.now();
       const eta = Math.min(SLA.maxTransitDays, Math.max(1, Math.round(etaDays)));
       const late = now > c.stageEnteredAt + SLA.order;
@@ -148,24 +172,24 @@ export const useClaims = create<ClaimsState>((set, get) => {
 
     setApproval: (id, approved) => {
       const c = find(id);
-      if (!c || c.stage !== 10 || c.closedAt) return false;
+      if (c?.stage !== 10 || c.closedAt) return false;
       const e = me();
-      if (!isBranchManagerOf(e, c.branchId)) {
+      if (!e || !isBranchManagerOf(e, c.branchId)) {
         toast.error("Unauthorized: Only the Branch Manager of this branch can approve delivery.");
         return false;
       }
       const now = Date.now();
       edit(id, (x) => ({
         ...x,
-        handover: { ...x.handover, approved, approvedBy: approved ? e!.name : "", approvedAt: approved ? now : null },
-        events: [ev(approved ? `Delivery approved by Branch Manager ${e!.name}` : `Delivery approval withdrawn by ${e!.name}`, approved ? "ok" : "warn", now), ...x.events],
+        handover: { ...x.handover, approved, approvedBy: approved ? e.name : "", approvedAt: approved ? now : null },
+        events: [ev(approved ? `Delivery approved by Branch Manager ${e.name}` : `Delivery approval withdrawn by ${e.name}`, approved ? "ok" : "warn", now), ...x.events],
       }));
       return true;
     },
 
     issueGatepass: (id, collectedBy) => {
       const c = find(id);
-      if (!c || c.stage !== 10 || c.closedAt || !c.handover.approved) return false;
+      if (c?.stage !== 10 || c.closedAt || !c.handover.approved) return false;
       const now = Date.now();
       const gatepassNo = nextGatepassNo(get().claims);
       edit(id, (x) => ({
@@ -183,7 +207,7 @@ export const useClaims = create<ClaimsState>((set, get) => {
       const fresh: { claim: Claim; topManagement: boolean; label: string }[] = [];
       const next = get().claims.map((c) => {
         const s = slaFor(c, now);
-        if (!s || s.health !== "breach" || c.escalations.includes(s.key)) return c;
+        if (s?.health !== "breach" || c.escalations.includes(s.key)) return c;
         const out: Claim = {
           ...c,
           escalations: [...c.escalations, s.key],
@@ -197,9 +221,10 @@ export const useClaims = create<ClaimsState>((set, get) => {
     },
 
     resetSample: () => {
-      get()
-        .claims.filter((c) => c.sample)
-        .forEach((c) => (["survey", "ramp"] as const).forEach((slot) => void deleteClaimFile(fileId(c.id, slot)).catch(() => undefined)));
+      for (const c of get().claims) {
+        if (!c.sample) continue;
+        for (const slot of ["survey", "ramp"] as const) void deleteClaimFile(fileId(c.id, slot)).catch(() => undefined);
+      }
       commit([...buildSampleClaims(Date.now()), ...get().claims.filter((c) => !c.sample)]);
     },
     clearAll: () => commit([]),
