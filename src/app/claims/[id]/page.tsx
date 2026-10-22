@@ -69,7 +69,7 @@ function ClaimView({ claim }: { claim: Claim }) {
             {claim.customerName} · {claim.model} · <span className="font-mono">{claim.regNo}</span> · {branch?.short ?? claim.branchId}
           </p>
           <p className="font-mono text-[11.5px] text-faint">
-            {claim.claimNo ? `${claim.ref} · ` : "Claim no. assigned at Stage 2 · "}Job card {claim.jobCardNo}
+            {claim.claimNo ? `${claim.ref} · ` : "Claim no. assigned at Stage 2 · "}{claim.jobCardNo ? `Job card ${claim.jobCardNo}` : "Job card assigned at Stage 2"}
           </p>
         </div>
       </div>

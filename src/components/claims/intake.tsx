@@ -15,18 +15,39 @@ import { PhotoThumb } from "./vehicle";
 
 export type IntakeErrors = Partial<Record<keyof Intake, string>>;
 
-/** Required intake fields; returns an error per missing or malformed one. */
+/** Required check-in fields; returns an error per missing or malformed one. */
 export function validateIntake(v: Intake): IntakeErrors {
   const e: IntakeErrors = {};
   if (!v.branchId) e.branchId = "Choose the showroom";
   if (!v.customerName.trim()) e.customerName = "Enter the customer's name";
   if (v.phone.replace(/\D/g, "").length < 10) e.phone = "Enter a 10-digit mobile number";
-  if (v.email.trim() && !/^\S+@\S+\.\S+$/.test(v.email.trim())) e.email = "Enter a valid email or leave it blank";
+  if (v.altPhone?.trim() && v.altPhone.replace(/\D/g, "").length < 10) e.altPhone = "Enter a 10-digit number or leave it blank";
   if (!v.regNo.trim()) e.regNo = "Enter the registration number";
-  if (!v.model.trim()) e.model = "Enter the vehicle model";
-  if (!v.jobCardNo.trim()) e.jobCardNo = "Enter the job card number";
-  if (!v.damage.trim()) e.damage = "Describe the damage";
+  if (!v.model.trim()) e.model = "Choose the vehicle model";
+  if (!v.damage.trim()) e.damage = "Briefly describe the damage";
   return e;
+}
+
+/** A registration number on an Indian-style plate: blue IND strip, bold capitals. */
+function PlateInput({ value, onChange, invalid, disabled }: { value: string; onChange: (v: string) => void; invalid?: boolean; disabled?: boolean }) {
+  return (
+    <div className={cn("flex h-9 overflow-hidden rounded-md border bg-white shadow-card", invalid ? "border-danger" : "border-slate-700/70", disabled && "opacity-60")}>
+      <span aria-hidden className="grid w-9 shrink-0 place-items-center bg-[#003399] text-[9px] font-bold tracking-wide text-white">
+        IND
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        placeholder="KL-40-AB-1234"
+        autoCapitalize="characters"
+        autoComplete="off"
+        spellCheck={false}
+        disabled={disabled}
+        aria-label="Vehicle registration number"
+        className="min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[14px] font-bold uppercase tracking-widest text-slate-900 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400"
+      />
+    </div>
+  );
 }
 
 /** Vehicle check-in / damage photo: drop a file, pick one, or take one on a phone or tablet. Shows a preview with Change and Remove. */
@@ -129,13 +150,15 @@ function PhotoField({ value, onChange, readOnly }: { value?: string; onChange: (
   );
 }
 
-/** The customer, vehicle, insurance and damage fields — shared by the New Claim page and the Stage 1 panel. */
+/** The Stage 1 check-in fields: customer, vehicle, insurance, damage and a photo. Shared by the New Claim form and the Stage 1 panel. */
 export function IntakeFields({ value, onChange, errors = {}, showBranch, readOnly }: { value: Intake; onChange: (v: Intake) => void; errors?: IntakeErrors; showBranch?: boolean; readOnly?: boolean }) {
   const { branches } = useBranchTools();
   const set = <K extends keyof Intake>(k: K, v: Intake[K]) => onChange({ ...value, [k]: v });
-  const text = (k: keyof Intake, placeholder?: string, extra?: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <Input value={value[k]} onChange={(e) => set(k, e.target.value)} placeholder={placeholder} invalid={!!errors[k]} disabled={readOnly} {...extra} />
+  const text = (k: "customerName" | "phone" | "altPhone" | "policyNo", placeholder?: string, extra?: React.InputHTMLAttributes<HTMLInputElement>) => (
+    <Input value={value[k] ?? ""} onChange={(e) => set(k, e.target.value)} placeholder={placeholder} invalid={!!errors[k]} disabled={readOnly} {...extra} />
   );
+  // A model typed on an older claim may not be in the list; keep it selectable.
+  const models = YAMAHA_MODELS.includes(value.model) || !value.model ? YAMAHA_MODELS : [value.model, ...YAMAHA_MODELS];
   return (
     <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       {showBranch && (
@@ -146,51 +169,37 @@ export function IntakeFields({ value, onChange, errors = {}, showBranch, readOnl
       <Field label="Customer name" required error={errors.customerName}>
         {text("customerName", "As on the RC book", { autoComplete: "off" })}
       </Field>
-      <Field label="Mobile number" required error={errors.phone}>
+      <Field label="Primary phone number" required error={errors.phone}>
         {text("phone", "98470 00000", { inputMode: "tel", autoComplete: "off" })}
       </Field>
-      <Field label="Email" hint="Optional" error={errors.email}>
-        {text("email", "name@example.com", { type: "email", autoComplete: "off" })}
+      <Field label="Alternate number" hint="Optional" error={errors.altPhone}>
+        {text("altPhone", "98470 00000", { inputMode: "tel", autoComplete: "off" })}
       </Field>
-      <Field label="Address" hint="Optional">
-        {text("address", "Town, district")}
+      <Field label="Vehicle model" required error={errors.model}>
+        <Select<string> value={value.model || null} onChange={(v) => set("model", v)} placeholder="Choose the model" searchable invalid={!!errors.model} disabled={readOnly} options={models.map((m) => ({ value: m, label: m }))} />
       </Field>
-      <Field label="Vehicle registration no." required error={errors.regNo}>
-        {text("regNo", "KL-40-AB-1234", { className: "font-mono uppercase", autoCapitalize: "characters" })}
-      </Field>
-      <Field label="Model" required error={errors.model}>
-        {text("model", "e.g. MT-15 V2", { list: "claim-models" })}
-        <datalist id="claim-models">
-          {YAMAHA_MODELS.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
-      </Field>
-      <Field label="Chassis no." hint="Optional">
-        {text("chassisNo", "17 characters", { className: "font-mono uppercase" })}
-      </Field>
-      <Field label="Odometer (km)" hint="Optional">
-        {text("odometer", "e.g. 4200", { inputMode: "numeric" })}
-      </Field>
-      <Field label="Insurer" hint="Optional">
+      <div className="sm:col-span-2">
+        <p className="mb-1.5 text-xs font-medium text-fg">
+          Registration number<span className="ml-0.5 text-accent-text">*</span>
+        </p>
+        <div className="sm:max-w-xs">
+          <PlateInput value={value.regNo} onChange={(v) => set("regNo", v)} invalid={!!errors.regNo} disabled={readOnly} />
+        </div>
+        {errors.regNo && <p className="mt-1 text-[11.5px] text-danger">{errors.regNo}</p>}
+      </div>
+      <Field label="Insurance company" hint="Optional">
         <Select<string> value={value.insurer || null} onChange={(v) => set("insurer", v)} placeholder="Choose the insurer" disabled={readOnly} options={INSURERS.map((i) => ({ value: i, label: i }))} />
       </Field>
-      <Field label="Policy no." hint="Optional">
+      <Field label="Policy number" hint="Optional">
         {text("policyNo", "Policy number", { className: "font-mono" })}
       </Field>
-      <Field label="Job card no." required error={errors.jobCardNo}>
-        {text("jobCardNo", "JC-26-0482", { className: "font-mono" })}
-      </Field>
-      <Field label="Date of accident" hint="Optional">
-        {text("accidentDate", undefined, { type: "date" })}
-      </Field>
-      <Field label="Damage description" required error={errors.damage} className="sm:col-span-2">
-        <Textarea value={value.damage} onChange={(e) => set("damage", e.target.value)} placeholder="What was damaged and how" invalid={!!errors.damage} disabled={readOnly} />
+      <Field label="Accident / damage summary" required error={errors.damage} className="sm:col-span-2">
+        <Textarea value={value.damage} onChange={(e) => set("damage", e.target.value)} placeholder="Brief issue: what was damaged and how" invalid={!!errors.damage} disabled={readOnly} rows={3} />
       </Field>
       <PhotoField value={value.vehicleImage} onChange={(v) => set("vehicleImage", v)} readOnly={readOnly} />
     </div>
   );
 }
 
-/** The fields of a claim that the intake form edits. */
-export const intakeOf = (c: Intake): Intake => ({ branchId: c.branchId, customerName: c.customerName, phone: c.phone, email: c.email, address: c.address, regNo: c.regNo, model: c.model, chassisNo: c.chassisNo, odometer: c.odometer, insurer: c.insurer, policyNo: c.policyNo, accidentDate: c.accidentDate, damage: c.damage, jobCardNo: c.jobCardNo, vehicleImage: c.vehicleImage });
+/** The fields of a claim that the Stage 1 form edits. */
+export const intakeOf = (c: Intake): Intake => ({ branchId: c.branchId, customerName: c.customerName, phone: c.phone, altPhone: c.altPhone ?? "", regNo: c.regNo, model: c.model, insurer: c.insurer, policyNo: c.policyNo, damage: c.damage, vehicleImage: c.vehicleImage });

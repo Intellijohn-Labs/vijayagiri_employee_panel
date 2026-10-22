@@ -8,12 +8,13 @@ import { fileId, isBranchManagerOf, useClaims, type FileSlot } from "@/store/cla
 import { toast } from "@/store/toast-store";
 import { loadClaimFile } from "@/lib/photo-db";
 import { fmtHours, stageSla } from "@/lib/sla-config";
-import { INTIMATION_MODES, APPROVALS, ESTIMATE_CATEGORIES, SLA, VISIT_STATUSES, customerPayable, estimateTotal, fmtDateTime, isoToday, missingFor, nextClaimNo, stageDef, type Claim, type ClaimFile, type EstimateLine, type StageNo } from "@/lib/claims";
+import { INTIMATION_MODES, APPROVALS, ESTIMATE_CATEGORIES, SLA, VISIT_STATUSES, customerPayable, estimateTotal, fmtDateTime, isoToday, jobCardOf, missingFor, nextClaimNo, nextJobCardNo, stageDef, toLocalInput, type Claim, type ClaimFile, type EstimateLine, type StageNo } from "@/lib/claims";
 import { cn, formatINR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/popover";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/primitives";
 import { IntakeFields, intakeOf, validateIntake } from "./intake";
+import { JobCardSheet, type JobCardForm } from "./job-card";
 import { useSla } from "./sla";
 import { Fact, Section } from "./ui";
 
@@ -165,44 +166,21 @@ function Stage1({ claim, readOnly }: PanelProps) {
 function Stage2({ claim, readOnly }: PanelProps) {
   const { save, finish } = useActions(claim);
   const claims = useClaims((s) => s.claims);
-  const [jobCardNo, setJobCardNo] = useState(claim.jobCardNo);
-  const [claimNo, setClaimNo] = useState(claim.claimNo);
-  const [jc, setJc] = useState(claim.jobCard);
-  const patch = { jobCardNo, claimNo, jobCard: jc };
+  // The job card number is generated when the sheet opens, and the receiving time defaults to now; both stay editable.
+  const [form, setForm] = useState<JobCardForm>(() => {
+    const jc = jobCardOf(claim);
+    return { jobCardNo: claim.jobCardNo || (readOnly ? "" : nextJobCardNo(claims)), claimNo: claim.claimNo, chassisNo: claim.chassisNo, odometer: claim.odometer, damage: claim.damage, jc: { ...jc, receivedAt: jc.receivedAt || (readOnly ? "" : toLocalInput(Date.now())) } };
+  });
+  const patch = { jobCardNo: form.jobCardNo.trim(), claimNo: form.claimNo.trim(), chassisNo: form.chassisNo.trim().toUpperCase(), odometer: form.odometer, damage: form.damage, jobCard: form.jc };
   const missing = missingFor({ ...claim, ...patch });
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Job card no." required>
-          <Input value={jobCardNo} onChange={(e) => setJobCardNo(e.target.value)} className="font-mono" disabled={readOnly} />
-        </Field>
-        <Field label="Job card date">
-          <Input type="date" value={jc.date} onChange={(e) => setJc({ ...jc, date: e.target.value })} disabled={readOnly} />
-        </Field>
-        <Field label="Service advisor" required>
-          <Input value={jc.advisor} onChange={(e) => setJc({ ...jc, advisor: e.target.value })} placeholder="Who is handling this claim" disabled={readOnly} />
-        </Field>
-        <Field label="Official claim no." required hint="Use the insurer's number if you have it">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input value={claimNo} onChange={(e) => setClaimNo(e.target.value)} placeholder="VAA/CLM/26-27/0041" className="font-mono" disabled={readOnly} />
-            </div>
-            {!readOnly && (
-              <Button onClick={() => setClaimNo(nextClaimNo(claims))} disabled={!!claimNo && claimNo === claim.claimNo}>
-                Generate
-              </Button>
-            )}
-          </div>
-        </Field>
-        <Field label="Job card notes" hint="Optional" className="sm:col-span-2">
-          <Textarea value={jc.notes} onChange={(e) => setJc({ ...jc, notes: e.target.value })} placeholder="Accessories left with the vehicle, customer requests…" disabled={readOnly} />
-        </Field>
-      </div>
+      <JobCardSheet claim={claim} value={form} onChange={setForm} readOnly={readOnly} onAutoJobNo={() => setForm({ ...form, jobCardNo: nextJobCardNo(claims) })} onAutoClaimNo={() => setForm({ ...form, claimNo: nextClaimNo(claims) })} canAutoClaimNo={!form.claimNo || form.claimNo !== claim.claimNo} />
       {!readOnly && (
         <Footer missing={missing}>
           <Button onClick={() => save(patch, "Job card saved")}>Save</Button>
           <Button variant="primary" onClick={() => finish(patch)}>
-            Assign claim no. & continue
+            Save job card & continue to Estimation
           </Button>
         </Footer>
       )}

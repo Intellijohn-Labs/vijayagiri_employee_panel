@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Plus, SearchX, Wrench } from "lucide-react";
+import { SearchX, Wrench } from "lucide-react";
 import { useClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
 import { toast } from "@/store/toast-store";
@@ -15,8 +14,8 @@ import { useClaimList, useClaimStats, type StatusFilter } from "./stats";
 import { PipelineOverview, StatsBar } from "./pipeline";
 import { useCodeRedBeeper } from "./beat";
 import { useClock } from "./sla";
+import { NewClaimButton } from "./new-claim";
 import { SlaSettings } from "./sla-settings";
-import { buttonLinkClass } from "./ui";
 
 const PAGE = 24;
 
@@ -38,9 +37,7 @@ export function ClaimsActions({ withReset }: { withReset?: boolean }) {
       )}
       <AlertSoundToggle />
       <SlaSettings />
-      <Link href="/claims/new" className={buttonLinkClass}>
-        <Plus className="h-3.5 w-3.5" /> New Claim
-      </Link>
+      <NewClaimButton />
     </>
   );
 }

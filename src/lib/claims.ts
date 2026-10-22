@@ -83,6 +83,74 @@ export interface ClaimEvent {
   kind?: "remark";
 }
 
+/** Fuel level written on the job card at check-in. */
+export const FUEL_LEVELS = ["E", "1/4", "1/2", "3/4", "F"] as const;
+export const JOB_BAYS = ["BAY1", "BAY2", "BAY3", "BAY4", "BAY5", "BAY6"] as const;
+export const JOB_TYPES = ["Accidental", "Paid", "Free"] as const;
+
+/** The digitised Vijayagiri Yamaha Job Card (Ver 2.1), filled in at Stage 2. The job card number itself is `Claim.jobCardNo`. */
+export interface JobCard {
+  date: string;
+  advisor: string;
+  notes: string;
+  bay: string;
+  couponNo: string;
+  amc: boolean;
+  pp: boolean;
+  jobType: (typeof JOB_TYPES)[number];
+  telReminder: boolean;
+  /** Local date and time as `YYYY-MM-DDTHH:mm`, the format a datetime-local input uses */
+  receivedAt: string;
+  promisedAt: string;
+  engineNo: string;
+  engineCc: string;
+  saleDate: string;
+  fuel: (typeof FUEL_LEVELS)[number];
+  toolkit: boolean;
+  firstAid: boolean;
+  serviceManual: boolean;
+  returnOldParts: boolean;
+  supervisor: string;
+  mechanic: string;
+  estParts: number | null;
+  estLabour: number | null;
+}
+
+export const blankJobCard = (): JobCard => ({
+  date: isoToday(),
+  advisor: "",
+  notes: "",
+  bay: "",
+  couponNo: "",
+  amc: false,
+  pp: false,
+  jobType: "Accidental",
+  telReminder: false,
+  receivedAt: "",
+  promisedAt: "",
+  engineNo: "",
+  engineCc: "",
+  saleDate: "",
+  fuel: "1/2",
+  toolkit: false,
+  firstAid: false,
+  serviceManual: false,
+  returnOldParts: false,
+  supervisor: "",
+  mechanic: "",
+  estParts: null,
+  estLabour: null,
+});
+
+/** A claim's job card with every field present, so claims saved before the full job card existed still open. */
+export const jobCardOf = (c: Pick<Claim, "jobCard">): JobCard => ({ ...blankJobCard(), ...c.jobCard });
+
+/** A timestamp as the `YYYY-MM-DDTHH:mm` a datetime-local input wants, in the viewer's time zone. */
+export const toLocalInput = (ts: number) => {
+  const d = new Date(ts);
+  return `${isoDate(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
 export interface Claim {
   id: string;
   /** Internal reference generated at intake, e.g. CLM-PBR-0012 */
@@ -102,6 +170,8 @@ export interface Claim {
 
   customerName: string;
   phone: string;
+  /** Second contact number, optional */
+  altPhone?: string;
   email: string;
   address: string;
   regNo: string;
@@ -115,7 +185,7 @@ export interface Claim {
   /** Check-in / damage photo uploaded at intake, as a compressed JPEG data URL. Cards show the catalogue picture without one. */
   vehicleImage?: string;
 
-  jobCard: { date: string; advisor: string; notes: string };
+  jobCard: JobCard;
   estimate: { lines: EstimateLine[]; intimationDate: string; intimationMode: (typeof INTIMATION_MODES)[number]; intimationRef: string; notes: string };
   survey: { surveyor: string; phone: string; visit: (typeof VISIT_STATUSES)[number]; visitDate: string; notes: string; report: ClaimFile | null; approval: (typeof APPROVALS)[number] };
   parts: { orderNo: string; orderedAt: number | null; orderedBy: string; etaDays: number; receivedAt: number | null };
@@ -222,14 +292,21 @@ export function missingFor(c: Claim): string[] {
       if (c.phone.replace(/\D/g, "").length < 10) m.push("A 10-digit customer phone number");
       if (!c.regNo.trim()) m.push("Vehicle registration number");
       if (!c.model.trim()) m.push("Vehicle model");
-      if (!c.jobCardNo.trim()) m.push("Job card number");
       if (!c.damage.trim()) m.push("Damage description");
       break;
-    case 2:
+    case 2: {
+      const j = jobCardOf(c);
       if (!c.jobCardNo.trim()) m.push("Job card number");
-      if (!c.jobCard.advisor.trim()) m.push("Service advisor");
       if (!c.claimNo.trim()) m.push("Official claim number");
+      if (!j.bay) m.push("Bay assignment");
+      if (!j.receivedAt) m.push("Vehicle receiving date and time");
+      if (!j.promisedAt) m.push("Promised delivery date and time");
+      else if (j.receivedAt && j.promisedAt <= j.receivedAt) m.push("Promised delivery after the receiving time");
+      if (!c.chassisNo.trim()) m.push("Frame / chassis number");
+      if (!c.odometer.trim()) m.push("Odometer reading");
+      if (!j.supervisor.trim()) m.push("Supervisor name");
       break;
+    }
     case 3:
       if (!c.estimate.lines.some((l) => l.amount > 0)) m.push("At least one estimate line with an amount");
       if (!c.estimate.intimationDate) m.push("Insurance intimation date");
@@ -289,14 +366,15 @@ const fy = (d: Date) => {
 };
 /** Next official claim number, e.g. VAA/CLM/26-27/0041. */
 export const nextClaimNo = (claims: Claim[], now = new Date()) => `VAA/CLM/${fy(now)}/${pad(Math.max(40, ...claims.map((c) => seqOf(c.claimNo))) + 1)}`;
-/** Next job card number, e.g. JC-26-0482. */
-export const nextJobCardNo = (claims: Claim[], now = new Date()) => `JC-${String(now.getFullYear()).slice(2)}-${pad(Math.max(480, ...claims.map((c) => seqOf(c.jobCardNo))) + 1)}`;
+/** Next job card number in the dealer's format, e.g. JC/10353/2026-27/0482. */
+export const nextJobCardNo = (claims: Claim[], now = new Date()) => {
+  const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `JC/10353/${y}-${String(y + 1).slice(2)}/${pad(Math.max(480, ...claims.map((c) => seqOf(c.jobCardNo))) + 1)}`;
+};
 export const nextGatepassNo = (claims: Claim[], now = new Date()) => `GP-${String(now.getFullYear()).slice(2)}-${pad(Math.max(0, ...claims.map((c) => seqOf(c.handover.gatepassNo))) + 1)}`;
 
-export const isoToday = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1, 2)}-${pad(d.getDate(), 2)}`;
-};
+const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1, 2)}-${pad(d.getDate(), 2)}`;
+export const isoToday = () => isoDate(new Date());
 
 /** "04h 12m 05s", or "2d 03h 10m" once there are days left. Negative input is shown as its absolute value. */
 export function formatSpan(ms: number): string {
@@ -325,11 +403,19 @@ export const defaultChecklist = (): ChecklistItem[] => {
   ];
 };
 
-export type Intake = Pick<Claim, "branchId" | "customerName" | "phone" | "email" | "address" | "regNo" | "model" | "chassisNo" | "odometer" | "insurer" | "policyNo" | "accidentDate" | "damage" | "jobCardNo" | "vehicleImage">;
+/** What the quick Stage 1 check-in asks for. The rest of the record is filled in at Stage 2 and later. */
+export type Intake = Pick<Claim, "branchId" | "customerName" | "phone" | "altPhone" | "regNo" | "model" | "insurer" | "policyNo" | "damage" | "vehicleImage">;
+type IntakeExtras = Partial<Pick<Claim, "email" | "address" | "chassisNo" | "odometer" | "accidentDate" | "jobCardNo">>;
 
 /** A new claim at stage 1 with every later stage empty. */
-export function blankClaim(i: Intake, id: string, ref: string, by: string, now: number): Claim {
+export function blankClaim(i: Intake & IntakeExtras, id: string, ref: string, by: string, now: number): Claim {
   return {
+    email: "",
+    address: "",
+    chassisNo: "",
+    odometer: "",
+    accidentDate: isoToday(),
+    jobCardNo: "",
     ...i,
     id,
     ref,
@@ -338,7 +424,7 @@ export function blankClaim(i: Intake, id: string, ref: string, by: string, now: 
     stageEnteredAt: now,
     createdAt: now,
     createdBy: by,
-    jobCard: { date: isoToday(), advisor: "", notes: "" },
+    jobCard: blankJobCard(),
     estimate: { lines: [], intimationDate: "", intimationMode: "Insurer portal", intimationRef: "", notes: "" },
     survey: { surveyor: "", phone: "", visit: "Scheduled", visitDate: "", notes: "", report: null, approval: "Pending" },
     parts: { orderNo: "", orderedAt: null, orderedBy: "", etaDays: SLA.maxTransitDays, receivedAt: null },
@@ -474,7 +560,10 @@ export function buildSampleClaims(now: number): Claim[] {
 
     // Fill in every earlier stage, walking backwards so each one has a plausible entry in the log.
     if (s.stage > 1) c.claimNo = `VAA/CLM/${fy(new Date(now))}/${pad(41 + i)}`;
-    c.jobCard = { date: c.accidentDate, advisor: "Service Advisor", notes: "" };
+    if (s.stage < 2) c.jobCardNo = "";
+    // From Stage 3 on the job card is complete; a claim waiting at Stage 2 still needs it filled in.
+    c.jobCard = { ...blankJobCard(), date: c.accidentDate, advisor: "Service Advisor" };
+    if (s.stage > 2) c.jobCard = { ...c.jobCard, bay: `BAY${(i % 3) + 1}`, receivedAt: toLocalInput(now - (s.stage + 1) * DAY), promisedAt: toLocalInput(now + 5 * DAY), supervisor: "Workshop Supervisor", mechanic: "Senior Mechanic", engineNo: `E3T4E${100000 + i * 11}`, engineCc: "155", fuel: "1/4", toolkit: true, firstAid: true };
     if (s.stage > 3) c.estimate = { ...c.estimate, lines: [{ id: "l1", category: "Parts", description: "Front fairing set", amount: 7800 }, { id: "l2", category: "Parts", description: "Fork assembly", amount: 9200 }, { id: "l3", category: "Labour", description: "Dismantle, fit & align", amount: 3400 }, { id: "l4", category: "Paint", description: "Panel paint & polish", amount: 3200 }], intimationDate: c.accidentDate, intimationRef: `INT-${900 + i}` };
     if (s.stage > 4) c.survey = { surveyor: "T. K. Varghese", phone: "98470 70707", visit: "Visited", visitDate: c.accidentDate, notes: "Damage consistent with the reported accident. Parts replacement approved.", report: { name: "survey-report.pdf", size: 184_320, at: enteredAt - 30 * HOUR, stored: false }, approval: "Approved" };
     if (s.stage > 5) c.parts = { orderNo: `YMD-PO-${884000 + i * 17}`, orderedAt: enteredAt - 90 * HOUR, orderedBy: "Parts Manager", etaDays: SLA.maxTransitDays, receivedAt: enteredAt };
