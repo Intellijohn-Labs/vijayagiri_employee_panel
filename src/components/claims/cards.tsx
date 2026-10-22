@@ -1,14 +1,16 @@
 "use client";
 
-import { memo, useCallback, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, MessageSquarePlus, Phone, Search, Siren } from "lucide-react";
+import { ArrowRight, MessageSquarePlus, Phone, Search, Siren, Volume2, VolumeX } from "lucide-react";
 import { useBranchTools } from "@/store/branch-store";
+import { useAlertSound } from "@/store/alert-sound-store";
 import { useClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
 import { toast } from "@/store/toast-store";
 import { branchLabel } from "@/lib/branches";
 import { fmtDateTime, slaFor, stageDef, type Claim, type Health } from "@/lib/claims";
+import { playMildAlertBeep, sfx } from "@/lib/sound";
 import { cn } from "@/lib/utils";
 import { cardIn, springFirm } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
@@ -91,6 +93,37 @@ const SURFACE: Record<Health, string> = {
 export const cardShell = "transform-gpu rounded-2xl border bg-surface/90 shadow-sm ring-1 ring-inset ring-white/60 transition-[box-shadow,border-color] duration-200 hover:shadow-md focus-within:shadow-md dark:ring-white/[0.04]";
 export { SURFACE as cardGlow };
 
+/** Pulsing border and a mild beep (when alert sound is on) for an overdue card. Spread onto the card. */
+export function overdueAlert(overdue: boolean) {
+  if (!overdue) return { className: "" };
+  return {
+    className: "red-pulse",
+    onPointerEnter: (e: React.PointerEvent) => e.pointerType === "mouse" && playMildAlertBeep(),
+    onClick: playMildAlertBeep,
+  };
+}
+
+/** Mute / unmute for the Code Red alert sounds, shared by the card, the Code Red hub and the list tools bar. Off by default. */
+export function AlertSoundToggle({ className }: { className?: string }) {
+  const { enabled, hydrate, set } = useAlertSound();
+  useEffect(hydrate, [hydrate]);
+  return (
+    <button
+      type="button"
+      aria-pressed={enabled}
+      aria-label={enabled ? "Mute overdue alert sound" : "Unmute overdue alert sound"}
+      title={enabled ? "Alert sound on" : "Alert sound off"}
+      onClick={() => {
+        set(!enabled);
+        if (!enabled) sfx.alert();
+      }}
+      className={cn("grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md border border-line bg-surface text-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-ring", enabled && "text-fg", className)}
+    >
+      {enabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 /**
  * One vehicle: who, what, where, how late, and what you can do about it.
  * Memoised, and it reads its status through `useClaimHealth`, so it re-renders when something about the claim
@@ -106,6 +139,7 @@ export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, s
   const remark = latestRemark(claim);
   const st = stageDef(claim.stage);
   const top = !!phase?.topManagement && health === "breach";
+  const alert = overdueAlert(health === "breach");
 
   const advance = () => {
     const r = complete(claim.id);
@@ -115,7 +149,7 @@ export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, s
 
   return (
     <motion.li custom={index} variants={cardIn} className="min-w-0">
-      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("flex h-full flex-col p-4", cardShell, SURFACE[health])}>
+      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("flex h-full flex-col p-4", cardShell, SURFACE[health], alert.className)} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
         <header className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate font-mono text-[12px] text-muted">{claim.claimNo || claim.ref}</p>
@@ -205,6 +239,7 @@ export function FilterBar({ trailing }: { trailing?: ReactNode }) {
         <Select<string> value={showroom} onChange={setShowroom} options={[{ value: "all", label: "All Showrooms" }, ...branches.map((b) => ({ value: b.id, label: branchLabel(b) }))]} />
       </div>
       {trailing}
+      <AlertSoundToggle className="sm:ml-auto" />
     </div>
   );
 }

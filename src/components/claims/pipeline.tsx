@@ -3,12 +3,13 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Check, Siren, Volume2, VolumeX } from "lucide-react";
+import { Check, Siren } from "lucide-react";
 import { STAGES, type StageNo } from "@/lib/claims";
 import { sfx } from "@/lib/sound";
 import { springFirm } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useAlertSound } from "@/store/alert-sound-store";
+import { AlertSoundToggle } from "./cards";
 import { useClaimStats } from "./stats";
 
 /** Summary pills under the page title: what is running, what is on schedule and what has lapsed its SLA. */
@@ -32,11 +33,10 @@ export function StatsBar() {
 /** The emergency filter, kept apart from the numbered SOP line: a radar-style card with the overdue count, one click to the Code Red view. */
 function CodeRedHub() {
   const { breachCount, topManagement } = useClaimStats();
-  const { enabled, hydrate, set } = useAlertSound();
+  const enabled = useAlertSound((s) => s.enabled);
   const hot = breachCount > 0;
   const seen = useRef(breachCount);
 
-  useEffect(hydrate, [hydrate]);
   // Chirp when a new breach appears. Browsers only allow audio after a tap or key press, so stay quiet until then.
   useEffect(() => {
     if (enabled && breachCount > seen.current && navigator.userActivation?.hasBeenActive) sfx.alert();
@@ -71,19 +71,7 @@ function CodeRedHub() {
           {topManagement > 0 && <span className="block text-[11px] leading-4 text-white/85">{topManagement} sent to Top Management</span>}
         </span>
       </Link>
-      <button
-        type="button"
-        aria-pressed={enabled}
-        aria-label={enabled ? "Mute Code Red alert sound" : "Unmute Code Red alert sound"}
-        title={enabled ? "Alert sound on" : "Alert sound off"}
-        onClick={() => {
-          set(!enabled);
-          if (!enabled) sfx.alert();
-        }}
-        className={cn("absolute right-1.5 top-1.5 grid h-6 w-6 cursor-pointer place-items-center rounded-md outline-none transition-colors focus-visible:shadow-ring", hot ? "text-white/80 hover:bg-white/20 hover:text-white" : "text-muted hover:bg-hover hover:text-fg")}
-      >
-        {enabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-      </button>
+      <AlertSoundToggle className={cn("absolute right-1.5 top-1.5 h-6 w-6 border-0 bg-transparent", hot && "text-white/80 hover:bg-white/20 hover:text-white")} />
     </motion.div>
   );
 }

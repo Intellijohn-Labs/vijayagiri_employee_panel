@@ -1,3 +1,4 @@
+import { useAlertSound } from "@/store/alert-sound-store";
 import { getSettings } from "@/store/settings-store";
 
 /**
@@ -86,3 +87,29 @@ export const sfx = {
     });
   },
 };
+
+let lastMild = 0;
+
+/**
+ * A single soft beep for overdue claims: a 520 Hz sine, 80 ms, quiet, fading out. Plays only when the alert sound is on,
+ * only after the user has tapped or pressed something (browsers block audio before that), and at most once a second so
+ * sweeping the pointer across several overdue cards stays calm.
+ */
+export function playMildAlertBeep() {
+  if (typeof window === "undefined" || !useAlertSound.getState().enabled || !navigator.userActivation?.hasBeenActive) return;
+  const now = Date.now();
+  if (now - lastMild < 1000) return;
+  const a = audio(true);
+  if (!a) return;
+  lastMild = now;
+  const t = a.currentTime;
+  const osc = a.createOscillator();
+  const amp = a.createGain();
+  osc.type = "sine";
+  osc.frequency.value = 520;
+  amp.gain.setValueAtTime(0.08, t);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+  osc.connect(amp).connect(a.destination);
+  osc.start(t);
+  osc.stop(t + 0.09);
+}

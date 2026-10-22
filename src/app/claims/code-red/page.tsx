@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { cardIn, springFirm } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Card, PageHeader } from "@/components/ui/primitives";
-import { FilterBar, cardGlow, cardShell, useRemarkDrawer } from "@/components/claims/cards";
+import { FilterBar, cardGlow, cardShell, overdueAlert, useRemarkDrawer } from "@/components/claims/cards";
 import { useClock } from "@/components/claims/sla";
 import { matchesFilters, useClaimStats } from "@/components/claims/stats";
 import { Fact, TapAnchor, TapLink, secondaryLinkClass } from "@/components/claims/ui";
@@ -31,10 +31,11 @@ const AlertCard = memo(function AlertCard({ row, index, onRemark }: { row: Row; 
   const branch = byId(c.branchId);
   const st = stageDef(c.stage);
   const escalated = c.escalations.includes(`${sla.key}:manual`);
+  const alert = overdueAlert(true);
 
   return (
     <motion.li custom={index} variants={cardIn}>
-      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("overflow-hidden", cardShell, cardGlow.breach, sla.topManagement && "ring-2 ring-danger/40")}>
+      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("overflow-hidden", cardShell, cardGlow.breach, alert.className, sla.topManagement && "ring-2 ring-danger/40")} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
         <div className="flex flex-wrap items-center gap-2 border-b border-danger/20 bg-danger px-4 py-2 text-white">
           <Siren className="h-4 w-4 animate-pulse" />
           <span className="text-[12px] font-bold tracking-wide">{sla.topManagement ? "TOP MANAGEMENT RED ALERT" : "OVERDUE"}</span>
