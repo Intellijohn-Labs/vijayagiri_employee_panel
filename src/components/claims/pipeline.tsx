@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { Siren } from "lucide-react";
+import { Check, Siren } from "lucide-react";
 import { STAGES, type StageNo } from "@/lib/claims";
 import { cn } from "@/lib/utils";
 import { useClaimStats } from "./stats";
@@ -55,43 +55,59 @@ function CodeRedHub() {
   );
 }
 
-/** The 10 SOP stages as a scrollable rail. Each step shows how many vehicles are there and how many are overdue. */
+/** Lifecycle names for the bar, a little fuller than `STAGE.short`. */
+const CYCLE_LABEL: Record<StageNo, string> = { 1: "Intake", 2: "Job Card", 3: "Estimation", 4: "Inspection", 5: "Spare Parts", 6: "Transit", 7: "Repair & Paint", 8: "Final QA & Bill", 9: "Settlement", 10: "Delivery" };
+
+/**
+ * The 10-stage SOP lifecycle as a scrollable bar. Stages before the open one are ticked and joined by a solid line,
+ * the open one is highlighted, and each node carries its vehicle count with a pulsing dot when any are overdue.
+ */
 function StageRail({ active }: { active?: StageNo }) {
   const stats = useClaimStats();
   const list = useRef<HTMLOListElement>(null);
-  // The rail scrolls on narrow screens; keep the selected stage in view.
+  // The bar scrolls on narrow screens; keep the selected stage in view.
   useEffect(() => {
     const el = list.current?.querySelector<HTMLElement>(`[data-step="${active}"]`);
-    if (list.current && el) list.current.scrollTo({ left: Math.max(0, el.offsetLeft - list.current.clientWidth / 2 + el.clientWidth / 2) });
+    if (list.current && el) list.current.scrollTo({ left: Math.max(0, el.offsetLeft - list.current.clientWidth / 2 + el.clientWidth / 2), behavior: "smooth" });
   }, [active]);
   return (
-    <ol ref={list} className="flex min-w-0 flex-1 overflow-x-auto rounded-xl border border-line bg-surface p-1.5 shadow-card" aria-label="Claim stages">
+    <ol ref={list} className="flex min-w-0 flex-1 overflow-x-auto rounded-xl border border-line bg-surface px-1 py-1.5 shadow-card [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Claim lifecycle stages">
       {STAGES.map((st) => {
         const selected = st.no === active;
+        const done = active !== undefined && st.no < active;
         const breaches = stats.breachPerStage[st.no];
         return (
-          <li key={st.no} data-step={st.no} className="relative min-w-[124px] flex-1">
-            {/* Connector to the next step, drawn behind the badge row */}
-            {st.no < STAGES.length && <span aria-hidden className="absolute left-[44px] right-0 top-[23px] h-px bg-line" />}
+          <li key={st.no} data-step={st.no} className="relative min-w-[92px] flex-1">
+            {/* Connectors to the neighbours: solid once the flow has passed them */}
+            {st.no > 1 && <span aria-hidden className={cn("absolute left-0 right-1/2 top-[21px] h-0.5", active !== undefined && st.no <= active ? "bg-accent" : "bg-line")} />}
+            {st.no < STAGES.length && <span aria-hidden className={cn("absolute left-1/2 right-0 top-[21px] h-0.5", done ? "bg-accent" : "bg-line")} />}
             <Link
               href={`/claims/stage/${st.no}`}
               title={st.name}
               aria-current={selected ? "step" : undefined}
-              className={cn(
-                "relative flex flex-col gap-1.5 rounded-lg border p-2.5 outline-none transition-[background-color,border-color,box-shadow] focus-visible:shadow-ring",
-                selected ? "border-accent bg-tint shadow-ring" : "border-transparent hover:bg-hover",
-              )}
+              className="group relative flex flex-col items-center gap-1 px-1 pb-1 pt-1.5 outline-none"
             >
-              <span className={cn("grid h-6 w-6 place-items-center rounded-full text-[11px] font-semibold", selected ? "bg-accent text-accent-fg" : "bg-surface text-fg ring-1 ring-inset ring-strong")}>{st.no}</span>
-              <span className={cn("text-[12px] font-medium leading-4", selected ? "text-accent-text" : "text-fg")}>{st.short}</span>
-              <span className="flex flex-wrap items-center gap-1">
-                <span className={cn("inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums", selected ? "bg-accent text-accent-fg" : "bg-fg/[0.07] text-fg")}>{stats.perStage[st.no]}</span>
+              <span
+                className={cn(
+                  "grid h-7 w-7 place-items-center rounded-full text-[12px] font-semibold transition-shadow group-focus-visible:shadow-ring",
+                  selected ? "bg-accent text-accent-fg shadow-ring ring-4 ring-accent/25" : done ? "border border-accent bg-tint text-accent-text" : "bg-surface text-muted ring-1 ring-inset ring-strong group-hover:text-fg group-hover:ring-accent",
+                )}
+              >
+                {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : st.no}
+              </span>
+              <span className={cn("whitespace-nowrap text-[12px] leading-4", selected ? "font-bold text-accent-text" : "font-medium text-fg")}>{CYCLE_LABEL[st.no]}</span>
+              <span
+                className={cn("inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full px-1.5 text-[11px] font-semibold tabular-nums", selected ? "bg-accent text-accent-fg" : "bg-fg/[0.07] text-fg")}
+                title={breaches > 0 ? `${breaches} overdue` : undefined}
+              >
                 {breaches > 0 && (
-                  <span className="inline-flex h-5 items-center gap-1 rounded-full bg-danger-tint px-1.5 text-[11px] font-semibold tabular-nums text-danger">
-                    <span className="h-1.5 w-1.5 rounded-full bg-danger" />
-                    {breaches} overdue
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inset-0 animate-ping rounded-full bg-danger" />
+                    <span className="relative h-1.5 w-1.5 rounded-full bg-danger" />
                   </span>
                 )}
+                {stats.perStage[st.no]}
+                {breaches > 0 && <span className="sr-only">, {breaches} overdue</span>}
               </span>
             </Link>
           </li>
@@ -101,7 +117,7 @@ function StageRail({ active }: { active?: StageNo }) {
   );
 }
 
-/** The whole pipeline at a glance: the Code Red hub beside the sequential stage rail. */
+/** The whole pipeline at a glance: the Code Red hub beside the sequential lifecycle bar. */
 export function PipelineOverview({ active }: { active?: StageNo }) {
   return (
     <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-stretch">
