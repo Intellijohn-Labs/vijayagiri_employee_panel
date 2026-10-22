@@ -5,10 +5,11 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Check, Siren } from "lucide-react";
 import { STAGES, type StageNo } from "@/lib/claims";
-import { sfx } from "@/lib/sound";
+import { isBeepLoopRunning, sfx } from "@/lib/sound";
 import { springFirm } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { useAlertSound } from "@/store/alert-sound-store";
+import { useBeatSync } from "./beat";
 import { AlertSoundToggle } from "./cards";
 import { useClaimStats } from "./stats";
 
@@ -36,10 +37,11 @@ function CodeRedHub() {
   const enabled = useAlertSound((s) => s.enabled);
   const hot = breachCount > 0;
   const seen = useRef(breachCount);
+  useBeatSync(hot);
 
   // Chirp when a new breach appears. Browsers only allow audio after a tap or key press, so stay quiet until then.
   useEffect(() => {
-    if (enabled && breachCount > seen.current && navigator.userActivation?.hasBeenActive) sfx.alert();
+    if (enabled && breachCount > seen.current && !isBeepLoopRunning() && navigator.userActivation?.hasBeenActive) sfx.alert();
     seen.current = breachCount;
   }, [breachCount, enabled]);
 
@@ -60,7 +62,7 @@ function CodeRedHub() {
               <span aria-hidden className="radar-ring-late absolute inset-0 rounded-full border-2 border-white/70" />
             </>
           )}
-          <Siren className={cn("relative h-5 w-5", hot && "animate-pulse")} />
+          <Siren className={cn("relative h-5 w-5", hot && "siren-beat")} />
         </span>
         <span className="min-w-0">
           <span className="flex items-baseline gap-1.5">
@@ -71,7 +73,7 @@ function CodeRedHub() {
           {topManagement > 0 && <span className="block text-[11px] leading-4 text-white/85">{topManagement} sent to Top Management</span>}
         </span>
       </Link>
-      <AlertSoundToggle className={cn("absolute right-1.5 top-1.5 h-6 w-6 border-0 bg-transparent", hot && "text-white/80 hover:bg-white/20 hover:text-white")} />
+      <AlertSoundToggle compact className={cn("absolute right-1.5 top-1.5 h-6 w-6 border-0 bg-transparent", hot && "text-white/80 hover:bg-white/20 hover:text-white")} />
     </motion.div>
   );
 }

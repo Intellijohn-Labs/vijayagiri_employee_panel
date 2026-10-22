@@ -14,6 +14,7 @@ import { cardIn, springFirm } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { FilterBar, cardGlow, cardShell, overdueAlert, useRemarkDrawer } from "@/components/claims/cards";
+import { useCodeRedBeeper, useBeatSync } from "@/components/claims/beat";
 import { useClock } from "@/components/claims/sla";
 import { matchesFilters, useClaimStats } from "@/components/claims/stats";
 import { Fact, TapAnchor, TapLink, secondaryLinkClass } from "@/components/claims/ui";
@@ -32,13 +33,14 @@ const AlertCard = memo(function AlertCard({ row, index, onRemark }: { row: Row; 
   const st = stageDef(c.stage);
   const escalated = c.escalations.includes(`${sla.key}:manual`);
   const top = isEscalated(sla);
+  useBeatSync(true);
   const alert = overdueAlert(true);
 
   return (
     <motion.li custom={index} variants={cardIn}>
       <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("overflow-hidden", cardShell, cardGlow.breach, alert.className, top && "ring-2 ring-danger/40")} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
         <div className="flex flex-wrap items-center gap-2 border-b border-danger/20 bg-danger px-4 py-2 text-white">
-          <Siren className="h-4 w-4 animate-pulse" />
+          <Siren className="siren-beat h-4 w-4" />
           <span className="text-[12px] font-bold tracking-wide">{top ? "TOP MANAGEMENT RED ALERT" : "OVERDUE"}</span>
           <span className="text-[12px] text-white/85">
             Stage {c.stage} · {st.name}
@@ -121,6 +123,7 @@ export default function CodeRedPage() {
   const { q, showroom } = useClaimFilters();
   const now = useClock();
   const remarks = useRemarkDrawer();
+  useCodeRedBeeper(stats.breachCount > 0);
 
   // Every overdue claim, worst first: Top Management alerts, then by how long they have been late.
   const rows = useMemo(() => {

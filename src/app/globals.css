@@ -148,7 +148,16 @@ html.theme-transition *::after {
   }
 }
 
-/* Code Red radar: two ripple rings leave the siren, and the card's glow beats like a heart (lub-dub, rest). */
+/*
+ * Code Red beat. Everything that pulses shares one period, --beat (1.2s; the sound loop sets it), and every peak lands
+ * on a blip of the "beep-beep" monitor tone: one at 0ms, one at 120ms. `syncBeat()` snaps the animations to the same
+ * clock the sound loop ticks on, so sight and sound stay together.
+ */
+:root {
+  --beat: 1.2s;
+}
+
+/* Two ripple rings leave the siren, half a beat apart. */
 @keyframes radarRing {
   0% {
     transform: scale(1);
@@ -160,45 +169,64 @@ html.theme-transition *::after {
   }
 }
 
+/* The card's glow flashes twice (lub-dub) then rests. */
 @keyframes beaconGlow {
   0%,
-  40%,
+  8%,
+  18%,
   100% {
     box-shadow: 0 0 0 0 rgb(var(--danger) / 0.25), 0 2px 10px -2px rgb(var(--danger) / 0.35);
   }
-  14%,
-  28% {
+  3%,
+  13% {
     box-shadow: 0 0 0 5px rgb(var(--danger) / 0.18), 0 0 26px 2px rgb(var(--danger) / 0.7);
   }
 }
 
-.radar-ring {
-  animation: radarRing 2s ease-out infinite;
+/* The siren icon jumps on each blip. */
+@keyframes sirenBeat {
+  0%,
+  10% {
+    transform: scale(1.2);
+  }
+  5%,
+  16%,
+  100% {
+    transform: scale(1);
+  }
 }
 
-.radar-ring-late {
-  animation: radarRing 2s ease-out 1s infinite;
-}
-
-.beacon-glow {
-  animation: beaconGlow 1.6s ease-in-out infinite;
-}
-
-/* Overdue claim cards: a gentle red breathing border, calm enough to sit beside normal cards. */
+/* Overdue claim cards: a gentle red border that is brightest on the beat and eases off between beats. */
 @keyframes redPulse {
   0%,
   100% {
-    border-color: rgba(239, 68, 68, 0.4);
-    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
-  }
-  50% {
     border-color: rgba(239, 68, 68, 0.9);
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
   }
+  50% {
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.radar-ring {
+  animation: radarRing var(--beat) ease-out infinite;
+}
+
+.radar-ring-late {
+  animation: radarRing var(--beat) ease-out calc(var(--beat) / 2) infinite;
+}
+
+.beacon-glow {
+  animation: beaconGlow var(--beat) ease-in-out infinite;
+}
+
+.siren-beat {
+  animation: sirenBeat var(--beat) ease-in-out infinite;
 }
 
 .red-pulse {
-  animation: redPulse 2.4s ease-in-out infinite;
+  animation: redPulse var(--beat) ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -206,7 +234,8 @@ html.theme-transition *::after {
   .red-pulse,
   .radar-ring,
   .radar-ring-late,
-  .beacon-glow {
+  .beacon-glow,
+  .siren-beat {
     animation: none;
   }
 }

@@ -96,7 +96,7 @@ let lastMild = 0;
  * sweeping the pointer across several overdue cards stays calm.
  */
 export function playMildAlertBeep() {
-  if (typeof window === "undefined" || !useAlertSound.getState().enabled || !navigator.userActivation?.hasBeenActive) return;
+  if (typeof window === "undefined" || loopOn || !useAlertSound.getState().enabled || !navigator.userActivation?.hasBeenActive) return;
   const now = Date.now();
   if (now - lastMild < 1000) return;
   const a = audio(true);
@@ -112,4 +112,92 @@ export function playMildAlertBeep() {
   osc.connect(amp).connect(a.destination);
   osc.start(t);
   osc.stop(t + 0.09);
+}
+
+/* ───────── Continuous Code Red beep ───────── */
+
+/** The default gap between beeps, and the period every Code Red animation pulses at. */
+export const BEAT_MS = 1200;
+const BEAT_ANIMATIONS = new Set(["radarRing", "beaconGlow", "sirenBeat", "redPulse"]);
+
+let loopOn = false;
+let loopMs = BEAT_MS;
+let loopTimer: ReturnType<typeof setTimeout> | undefined;
+let stopWaiting: (() => void) | undefined;
+let syncQueued = false;
+
+export const isBeepLoopRunning = () => loopOn;
+
+/** Snaps every Code Red animation to the page clock, which the beep loop also ticks on, so they land together. */
+export function syncBeat() {
+  if (typeof document === "undefined" || typeof CSSAnimation === "undefined" || syncQueued) return;
+  syncQueued = true;
+  requestAnimationFrame(() => {
+    syncQueued = false;
+    for (const a of document.getAnimations()) if (a instanceof CSSAnimation && BEAT_ANIMATIONS.has(a.animationName)) a.startTime = 0;
+  });
+}
+
+/** One monitor "beep-beep": two 600 Hz blips of 70 ms with 50 ms of silence between, softly faded in and out. */
+function blip(a: AudioContext, t: number) {
+  const osc = a.createOscillator();
+  const amp = a.createGain();
+  osc.type = "sine";
+  osc.frequency.value = 600;
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.linearRampToValueAtTime(0.07, t + 0.012);
+  amp.gain.setValueAtTime(0.07, t + 0.055);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+  osc.connect(amp).connect(a.destination);
+  osc.start(t);
+  osc.stop(t + 0.08);
+}
+
+function tick() {
+  if (!document.hidden) {
+    const a = audio(true);
+    if (a) {
+      blip(a, a.currentTime);
+      blip(a, a.currentTime + 0.12);
+    }
+  }
+  schedule();
+}
+
+// Beeps fall on whole multiples of the period on the page clock, the same clock the animations are snapped to.
+function schedule() {
+  if (!loopOn) return;
+  loopTimer = setTimeout(tick, loopMs - (performance.now() % loopMs));
+}
+
+/** Starts the repeating alert beep (once, however often it is called). Waits for the first click or key press, as browsers insist on. */
+export function startContinuousBeepLoop(intervalMs = BEAT_MS) {
+  if (typeof window === "undefined") return;
+  const ms = Math.min(1500, Math.max(1200, intervalMs));
+  if (loopOn && ms === loopMs) return;
+  stopContinuousBeepLoop();
+  loopOn = true;
+  loopMs = ms;
+  document.documentElement.style.setProperty("--beat", `${ms}ms`);
+  syncBeat();
+  if (navigator.userActivation?.hasBeenActive) {
+    schedule();
+    return;
+  }
+  const events = ["pointerdown", "keydown", "touchstart"] as const;
+  const go = () => {
+    stopWaiting?.();
+    schedule();
+  };
+  for (const e of events) window.addEventListener(e, go, { capture: true, once: true });
+  stopWaiting = () => {
+    for (const e of events) window.removeEventListener(e, go, { capture: true });
+    stopWaiting = undefined;
+  };
+}
+
+export function stopContinuousBeepLoop() {
+  loopOn = false;
+  clearTimeout(loopTimer);
+  stopWaiting?.();
 }

@@ -18,6 +18,7 @@ import { Drawer } from "@/components/ui/overlay";
 import { Select } from "@/components/ui/popover";
 import { Input, Textarea } from "@/components/ui/primitives";
 import { HealthBadge, SlaChip, useClaimEscalated, useClaimHealth } from "./sla";
+import { useBeatSync } from "./beat";
 import { TapLink, secondaryLinkClass } from "./ui";
 import { BikeThumb, PlateBadge } from "./vehicle";
 
@@ -103,23 +104,32 @@ export function overdueAlert(overdue: boolean) {
   };
 }
 
-/** Mute / unmute for the Code Red alert sounds, shared by the card, the Code Red hub and the list tools bar. Off by default. */
-export function AlertSoundToggle({ className }: { className?: string }) {
+/**
+ * Mute / unmute for the Code Red alert sounds, shared by the toolbar and the Code Red card. Off by default and remembered.
+ * The pill is the toolbar version; `compact` is the icon-only one for tight spots.
+ */
+export function AlertSoundToggle({ className, compact }: { className?: string; compact?: boolean }) {
   const { enabled, hydrate, set } = useAlertSound();
   useEffect(hydrate, [hydrate]);
   return (
     <button
       type="button"
       aria-pressed={enabled}
-      aria-label={enabled ? "Mute overdue alert sound" : "Unmute overdue alert sound"}
-      title={enabled ? "Alert sound on" : "Alert sound off"}
+      aria-label={enabled ? "Mute alert sound" : "Unmute alert sound"}
+      title={enabled ? "Sound alert active. Click to mute" : "Muted. Click to turn the sound alert on"}
       onClick={() => {
         set(!enabled);
         if (!enabled) sfx.alert();
       }}
-      className={cn("grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md border border-line bg-surface text-muted outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-ring", enabled && "text-fg", className)}
+      className={cn(
+        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 text-[12px] font-medium outline-none transition-colors focus-visible:shadow-ring",
+        compact ? "h-8 w-8 rounded-md border border-line bg-surface text-muted hover:bg-hover hover:text-fg" : "h-8 rounded-full border px-3",
+        !compact && (enabled ? "border-ok/40 bg-ok-tint text-ok hover:bg-ok/20" : "border-line bg-surface text-muted hover:bg-hover hover:text-fg"),
+        className,
+      )}
     >
       {enabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+      {!compact && (enabled ? "Sound Alert Active" : "Muted")}
     </button>
   );
 }
@@ -140,6 +150,7 @@ export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, s
   const st = stageDef(claim.stage);
   const top = useClaimEscalated(claim);
   const alert = overdueAlert(health === "breach");
+  useBeatSync(health === "breach");
 
   const advance = () => {
     const r = complete(claim.id);
@@ -239,7 +250,6 @@ export function FilterBar({ trailing }: { trailing?: ReactNode }) {
         <Select<string> value={showroom} onChange={setShowroom} options={[{ value: "all", label: "All Showrooms" }, ...branches.map((b) => ({ value: b.id, label: branchLabel(b) }))]} />
       </div>
       {trailing}
-      <AlertSoundToggle className="sm:ml-auto" />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { useSessionEmployee, canAccess } from "@/store/employee-store";
 import { estimateTotal, fmtDateTime, healthOf, isEscalated, slaSummary, stageDef, type Claim, type StageNo } from "@/lib/claims";
 import { cn, formatINR } from "@/lib/utils";
 import { Card } from "@/components/ui/primitives";
+import { useCodeRedBeeper } from "@/components/claims/beat";
 import { HealthBadge, SlaHero, TopManagementAlert, useClock, useSla } from "@/components/claims/sla";
 import { StagePanel } from "@/components/claims/stages";
 import { Stepper } from "@/components/claims/stepper";
@@ -50,6 +51,7 @@ function ClaimView({ claim }: { claim: Claim }) {
   const viewing = picked?.progress === progress ? picked.stage : claim.stage;
   const def = stageDef(viewing);
   const breached = health === "breach";
+  useCodeRedBeeper(breached && isEscalated(sla));
 
   return (
     <>

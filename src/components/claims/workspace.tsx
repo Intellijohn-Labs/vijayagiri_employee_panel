@@ -6,13 +6,15 @@ import { Plus, SearchX, Wrench } from "lucide-react";
 import { useClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
 import { toast } from "@/store/toast-store";
-import { slaSummary, stageDef, type StageNo } from "@/lib/claims";
+import { isEscalated, slaFor, slaSummary, stageDef, type StageNo } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { Card, PageHeader } from "@/components/ui/primitives";
-import { CardGrid, FilterBar } from "./cards";
+import { AlertSoundToggle, CardGrid, FilterBar } from "./cards";
 import { useClaimList, useClaimStats, type StatusFilter } from "./stats";
 import { PipelineOverview, StatsBar } from "./pipeline";
+import { useCodeRedBeeper } from "./beat";
+import { useClock } from "./sla";
 import { SlaSettings } from "./sla-settings";
 import { buttonLinkClass } from "./ui";
 
@@ -34,6 +36,7 @@ export function ClaimsActions({ withReset }: { withReset?: boolean }) {
           Reset demo data
         </Button>
       )}
+      <AlertSoundToggle />
       <SlaSettings />
       <Link href="/claims/new" className={buttonLinkClass}>
         <Plus className="h-3.5 w-3.5" /> New Claim
@@ -53,7 +56,10 @@ export function Workspace({ stage }: { stage?: StageNo }) {
   const stats = useClaimStats();
   const resetSample = useClaims((s) => s.resetSample);
   const { shown, counts } = useClaimList(status, stage);
+  const now = useClock();
   const def = stage ? stageDef(stage) : null;
+  // High severity on screen: a claim here has been escalated to Top Management.
+  useCodeRedBeeper(shown.some((c) => isEscalated(slaFor(c, now))));
   const filtering = !!q.trim() || showroom !== "all" || status !== "all";
   const withDelivered = stage === undefined || stage === 10;
 
