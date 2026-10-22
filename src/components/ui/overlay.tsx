@@ -10,6 +10,12 @@ const FOCUSABLE = 'a[href],button:not([disabled]),textarea,input:not([disabled])
 
 let scrollLocks = 0;
 function useOverlayBehaviour(open: boolean, onClose: () => void, panel: React.RefObject<HTMLElement | null>) {
+  // Callers usually pass a fresh inline `onClose` every render. Keep the latest in a ref so the effect below runs once per
+  // open, not on every render: re-running it would re-focus the first field and pull focus out of whatever is being typed in.
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -22,7 +28,7 @@ function useOverlayBehaviour(open: boolean, onClose: () => void, panel: React.Re
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !e.defaultPrevented) {
         e.stopPropagation();
-        onClose();
+        close.current();
       }
       if (e.key === "Tab" && panel.current) {
         const f = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
@@ -45,7 +51,7 @@ function useOverlayBehaviour(open: boolean, onClose: () => void, panel: React.Re
       if (--scrollLocks === 0) document.body.style.overflow = "";
       previous?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose, panel]);
+  }, [open, panel]);
 }
 
 interface BaseProps {
@@ -77,7 +83,7 @@ export function Drawer({ open, onClose, title, description, children, footer, wi
             animate={{ x: 0, transition: { type: "spring", stiffness: 300, damping: 32 } }}
             exit={{ x: "100%", transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } }}
             style={{ maxWidth: width }}
-            className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-line bg-overlay shadow-pop"
+            className="pointer-events-auto absolute inset-y-0 right-0 z-10 flex w-full flex-col border-l border-line bg-overlay shadow-pop"
           >
             <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
               <div className="min-w-0">
@@ -111,7 +117,7 @@ export function Lightbox({ open, onClose, src, title }: { open: boolean; onClose
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="fixed inset-0 z-[60] grid place-items-center p-4" onClick={onClose}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
-          <motion.div ref={panel} role="dialog" aria-modal="true" aria-label={title} initial={{ scale: 0.96 }} animate={{ scale: 1 }} exit={{ scale: 0.97 }} className="relative max-h-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+          <motion.div ref={panel} role="dialog" aria-modal="true" aria-label={title} initial={{ scale: 0.96 }} animate={{ scale: 1 }} exit={{ scale: 0.97 }} className="pointer-events-auto relative z-10 max-h-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
             {/* biome-ignore lint/performance/noImgElement: a data URL the user just uploaded, which next/image cannot optimise */}
             <img src={src} alt={title} className="max-h-[85vh] w-auto max-w-full rounded-xl bg-white object-contain shadow-pop" />
             <Button variant="secondary" size="sm" iconOnly onClick={onClose} aria-label="Close preview" className="absolute right-2 top-2">
