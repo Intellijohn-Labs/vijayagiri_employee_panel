@@ -8,7 +8,7 @@ import { useClaims, useVisibleClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
 import { toast } from "@/store/toast-store";
 import { branchLabel } from "@/lib/branches";
-import { fmtDateTime, formatSpan, slaFor, stageDef, type Claim, type SlaState } from "@/lib/claims";
+import { fmtDateTime, formatSpan, isEscalated, slaFor, stageDef, type Claim, type SlaState } from "@/lib/claims";
 import { cn } from "@/lib/utils";
 import { cardIn, springFirm } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
@@ -31,14 +31,15 @@ const AlertCard = memo(function AlertCard({ row, index, onRemark }: { row: Row; 
   const branch = byId(c.branchId);
   const st = stageDef(c.stage);
   const escalated = c.escalations.includes(`${sla.key}:manual`);
+  const top = isEscalated(sla);
   const alert = overdueAlert(true);
 
   return (
     <motion.li custom={index} variants={cardIn}>
-      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("overflow-hidden", cardShell, cardGlow.breach, alert.className, sla.topManagement && "ring-2 ring-danger/40")} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
+      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("overflow-hidden", cardShell, cardGlow.breach, alert.className, top && "ring-2 ring-danger/40")} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
         <div className="flex flex-wrap items-center gap-2 border-b border-danger/20 bg-danger px-4 py-2 text-white">
           <Siren className="h-4 w-4 animate-pulse" />
-          <span className="text-[12px] font-bold tracking-wide">{sla.topManagement ? "TOP MANAGEMENT RED ALERT" : "OVERDUE"}</span>
+          <span className="text-[12px] font-bold tracking-wide">{top ? "TOP MANAGEMENT RED ALERT" : "OVERDUE"}</span>
           <span className="text-[12px] text-white/85">
             Stage {c.stage} · {st.name}
           </span>
@@ -92,7 +93,7 @@ const AlertCard = memo(function AlertCard({ row, index, onRemark }: { row: Row; 
               Call branch
             </Button>
           )}
-          {sla.topManagement ? (
+          {top ? (
             <span className="inline-flex h-8 items-center gap-1.5 px-1 text-[12px] font-medium text-danger">
               <CheckCircle2 className="h-3.5 w-3.5" /> Top Management notified
             </span>
@@ -128,7 +129,7 @@ export default function CodeRedPage() {
       const sla = slaFor(claim, now);
       if (sla?.health === "breach" && matchesFilters(claim, q, showroom)) out.push({ claim, sla });
     }
-    return out.sort((a, z) => Number(z.sla.topManagement) - Number(a.sla.topManagement) || a.sla.remainingMs - z.sla.remainingMs);
+    return out.sort((a, z) => Number(isEscalated(z.sla)) - Number(isEscalated(a.sla)) || a.sla.remainingMs - z.sla.remainingMs);
   }, [claims, q, showroom, now]);
 
   const worst = stats.breached.map((c) => slaFor(c, now)).reduce((m, s) => Math.max(m, s ? -s.remainingMs : 0), 0);
@@ -143,7 +144,7 @@ export default function CodeRedPage() {
 
   return (
     <>
-      <PageHeader title="Code Red" description="Every claim that has run past an SLA timer, worst first. A lapsed 12-hour central dispatch goes to Top Management automatically." actions={<ClaimsActions />} />
+      <PageHeader title="Code Red" description="Every claim that has run past an SLA timer, worst first. A stage whose rule escalates (central dispatch by default) goes to Top Management automatically." actions={<ClaimsActions />} />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tile("Overdue claims", String(stats.breachCount), stats.breachCount > 0)}

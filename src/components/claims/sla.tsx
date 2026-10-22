@@ -2,8 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import { AlertOctagon, CheckCircle2, Clock, Siren } from "lucide-react";
-import { HEALTH_LABEL, formatSpan, healthOf, slaFor, type Claim, type Health, type SlaState } from "@/lib/claims";
+import { HEALTH_LABEL, formatSpan, healthOf, isEscalated, slaFor, type Claim, type Health, type SlaState } from "@/lib/claims";
 import { cn } from "@/lib/utils";
+import { useSlaConfig } from "@/store/sla-config-store";
 
 /* One shared 1-second clock for every countdown on screen. */
 let current = Date.now();
@@ -26,6 +27,11 @@ const subscribe = (fn: () => void) => {
     }
   };
 };
+// Saving new SLA thresholds re-evaluates every status on screen at once instead of on the next tick.
+useSlaConfig.subscribe(() => {
+  current = Date.now();
+  for (const l of listeners) l();
+});
 /** Milliseconds since epoch, refreshed every second while anything is subscribed. */
 export const useClock = () => useSyncExternalStore(subscribe, () => current, () => current);
 
@@ -71,6 +77,15 @@ export function useClaimHealth(claim: Claim): Health {
   );
 }
 
+/** Whether the claim has been escalated to Top Management by its stage's rule. Like `useClaimHealth`, it only re-renders when that flips. */
+export function useClaimEscalated(claim: Claim): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => isEscalated(slaFor(claim, current)),
+    () => isEscalated(slaFor(claim, current)),
+  );
+}
+
 /** The live SLA state of a claim: re-evaluated every second. */
 export function useSla(claim: Claim): SlaState | null {
   const now = useClock();
@@ -112,7 +127,7 @@ export function SlaHero({ claim }: { claim: Claim }) {
     return (
       <div className="rounded-xl border border-ok/25 bg-ok-tint p-4">
         <p className="flex items-center gap-2 text-sm font-semibold text-ok"><Clock className="h-4 w-4" /> On Track</p>
-        <p className="mt-1 text-[12.5px] text-muted">This stage has no SLA timer. The next timed stage starts when parts are ordered.</p>
+        <p className="mt-1 text-[12.5px] text-muted">No SLA timer is running for this claim.</p>
       </div>
     );
   }
@@ -139,14 +154,14 @@ export function SlaHero({ claim }: { claim: Claim }) {
   );
 }
 
-/** Red block shown for the Stage 6 lapse. */
-export function TopManagementAlert({ className }: { className?: string }) {
+/** Red block shown when a stage's rule has escalated the claim to Top Management. */
+export function TopManagementAlert({ className, label }: { className?: string; label?: string }) {
   return (
     <div role="alert" className={cn("flex items-start gap-3 rounded-xl border border-danger/50 bg-danger px-4 py-3 text-white shadow-card", className)}>
       <Siren className="mt-0.5 h-5 w-5 shrink-0 animate-pulse" />
       <div>
         <p className="text-sm font-bold tracking-wide">TOP MANAGEMENT RED ALERT</p>
-        <p className="mt-0.5 text-[12.5px] text-white/90">The 12-hour window to dispatch from Central and reach the branch has lapsed. Top Management has been notified (simulated) and this claim needs immediate action.</p>
+        <p className="mt-0.5 text-[12.5px] text-white/90">The SLA for {label ? `“${label}”` : "this stage"} has lapsed. Top Management has been notified (simulated) and this claim needs immediate action.</p>
       </div>
     </div>
   );

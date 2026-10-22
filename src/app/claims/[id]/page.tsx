@@ -6,7 +6,7 @@ import { ArrowLeft, SearchX, TriangleAlert } from "lucide-react";
 import { useBranch } from "@/store/branch-store";
 import { useClaims } from "@/store/claims-store";
 import { useSessionEmployee, canAccess } from "@/store/employee-store";
-import { estimateTotal, fmtDateTime, healthOf, stageDef, type Claim, type StageNo } from "@/lib/claims";
+import { estimateTotal, fmtDateTime, healthOf, isEscalated, slaSummary, stageDef, type Claim, type StageNo } from "@/lib/claims";
 import { cn, formatINR } from "@/lib/utils";
 import { Card } from "@/components/ui/primitives";
 import { HealthBadge, SlaHero, TopManagementAlert, useClock, useSla } from "@/components/claims/sla";
@@ -72,8 +72,8 @@ function ClaimView({ claim }: { claim: Claim }) {
         </div>
       </div>
 
-      {breached && sla?.topManagement ? (
-        <TopManagementAlert className="mb-5" />
+      {breached && isEscalated(sla) ? (
+        <TopManagementAlert className="mb-5" label={sla?.label} />
       ) : breached && sla ? (
         <div role="alert" className="mb-5 flex items-start gap-3 rounded-xl border border-danger/40 bg-danger-tint px-4 py-3">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
@@ -96,7 +96,7 @@ function ClaimView({ claim }: { claim: Claim }) {
             </p>
             <h2 className="mt-1 text-[16px] font-semibold tracking-tight text-fg">{def.name}</h2>
             <p className="mt-0.5 text-[13px] text-muted">{def.blurb}</p>
-            {def.sla && <p className="mt-1.5 text-[12px] font-medium text-accent-text">SLA · {def.sla}</p>}
+            <p className="mt-1.5 text-[12px] font-medium text-accent-text">SLA · {slaSummary(def.no)}</p>
           </div>
           <StagePanel claim={claim} stage={viewing} />
         </Card>

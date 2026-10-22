@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { deleteClaimFile, saveClaimFile } from "@/lib/photo-db";
-import { SLA, blankClaim, buildSampleClaims, logEntry, missingFor, nextGatepassNo, nextRef, slaFor, stageDef, type Claim, type ClaimEvent, type ClaimFile, type Intake, type StageNo } from "@/lib/claims";
+import { HOUR, SLA, blankClaim, buildSampleClaims, isEscalated, logEntry, missingFor, nextGatepassNo, nextRef, slaFor, stageDef, type Claim, type ClaimEvent, type ClaimFile, type Intake, type StageNo } from "@/lib/claims";
+import { fmtHours, stageSla } from "@/lib/sla-config";
 import { canAccess, useAccessibleIds, useEmployees, type Employee } from "./employee-store";
 import { toast } from "./toast-store";
 
@@ -121,11 +122,12 @@ export const useClaims = create<ClaimsState>((set, get) => {
       if (c?.stage !== 5 || !orderNo.trim()) return false;
       const now = Date.now();
       const eta = Math.min(SLA.maxTransitDays, Math.max(1, Math.round(etaDays)));
-      const late = now > c.stageEnteredAt + SLA.order;
+      const orderH = stageSla(5).durationH;
+      const late = now > c.stageEnteredAt + orderH * HOUR;
       edit(id, (x) => ({
         ...x,
         parts: { ...x.parts, orderNo: orderNo.trim(), orderedAt: now, orderedBy: myName(), etaDays: eta },
-        events: [ev(`Yamaha order ${orderNo.trim()} placed by ${myName()} — transit ETA ${eta} day${eta === 1 ? "" : "s"}${late ? " (5-hour order SLA was missed)" : ""}`, late ? "warn" : "ok", now), ...x.events],
+        events: [ev(`Yamaha order ${orderNo.trim()} placed by ${myName()} — transit ETA ${eta} day${eta === 1 ? "" : "s"}${late ? ` (${fmtHours(orderH)} order SLA was missed)` : ""}`, late ? "warn" : "ok", now), ...x.events],
       }));
       return true;
     },
@@ -207,13 +209,18 @@ export const useClaims = create<ClaimsState>((set, get) => {
       const fresh: { claim: Claim; topManagement: boolean; label: string }[] = [];
       const next = get().claims.map((c) => {
         const s = slaFor(c, now);
-        if (s?.health !== "breach" || c.escalations.includes(s.key)) return c;
+        if (s?.health !== "breach") return c;
+        // Claims escalated before thresholds were configurable already carry the stage 6 alert under the plain key.
+        const topDone = c.escalations.includes(`${s.key}:top`) || (s.key === "6:central" && c.escalations.includes(s.key));
+        const newBreach = !c.escalations.includes(s.key);
+        const newTop = isEscalated(s) && !topDone;
+        if (!newBreach && !newTop) return c;
         const out: Claim = {
           ...c,
-          escalations: [...c.escalations, s.key],
-          events: [ev(s.topManagement ? "TOP MANAGEMENT RED ALERT raised — 12-hour dispatch SLA lapsed; Top Management notified (simulated)" : `SLA breached — ${s.label}`, "danger", s.dueAt), ...c.events].sort((a, z) => z.at - a.at),
+          escalations: [...c.escalations, ...(newBreach ? [s.key] : []), ...(newTop ? [`${s.key}:top`] : [])],
+          events: [newTop ? ev(`TOP MANAGEMENT RED ALERT raised — ${s.label} SLA lapsed; Top Management notified (simulated)`, "danger", s.dueAt + s.escalateAfterMs) : ev(`SLA breached — ${s.label}`, "danger", s.dueAt), ...c.events].sort((a, z) => z.at - a.at),
         };
-        fresh.push({ claim: out, topManagement: s.topManagement, label: s.label });
+        fresh.push({ claim: out, topManagement: newTop, label: s.label });
         return out;
       });
       if (fresh.length) commit(next);

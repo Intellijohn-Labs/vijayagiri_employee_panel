@@ -7,6 +7,7 @@ import { useSessionEmployee } from "@/store/employee-store";
 import { fileId, isBranchManagerOf, useClaims, type FileSlot } from "@/store/claims-store";
 import { toast } from "@/store/toast-store";
 import { loadClaimFile } from "@/lib/photo-db";
+import { fmtHours, stageSla } from "@/lib/sla-config";
 import { INTIMATION_MODES, APPROVALS, ESTIMATE_CATEGORIES, SLA, VISIT_STATUSES, customerPayable, estimateTotal, fmtDateTime, isoToday, missingFor, nextClaimNo, stageDef, type Claim, type ClaimFile, type EstimateLine, type StageNo } from "@/lib/claims";
 import { cn, formatINR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -371,7 +372,7 @@ function Stage5({ claim, readOnly }: PanelProps) {
       </Section>
 
       <div className="mt-5">
-        <Section title="Yamaha order" hint={`Parts Manager places it within ${SLA.order / 3_600_000} hours of this stage starting`}>
+        <Section title="Yamaha order" hint={`Parts Manager places it within ${fmtHours(stageSla(5).durationH)} of this stage starting`}>
           {ordered ? (
             <dl className="grid gap-4 sm:grid-cols-4">
               <Fact label="Order no." mono>{claim.parts.orderNo}</Fact>

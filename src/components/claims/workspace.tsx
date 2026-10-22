@@ -6,13 +6,14 @@ import { Plus, SearchX, Wrench } from "lucide-react";
 import { useClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
 import { toast } from "@/store/toast-store";
-import { stageDef, type StageNo } from "@/lib/claims";
+import { slaSummary, stageDef, type StageNo } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { CardGrid, FilterBar } from "./cards";
 import { useClaimList, useClaimStats, type StatusFilter } from "./stats";
 import { PipelineOverview, StatsBar } from "./pipeline";
+import { SlaSettings } from "./sla-settings";
 import { buttonLinkClass } from "./ui";
 
 const PAGE = 24;
@@ -33,6 +34,7 @@ export function ClaimsActions({ withReset }: { withReset?: boolean }) {
           Reset demo data
         </Button>
       )}
+      <SlaSettings />
       <Link href="/claims/new" className={buttonLinkClass}>
         <Plus className="h-3.5 w-3.5" /> New Claim
       </Link>
@@ -67,7 +69,7 @@ export function Workspace({ stage }: { stage?: StageNo }) {
     <>
       <PageHeader
         title={def ? `${def.no}. ${def.name}` : "Claims & Workshop"}
-        description={def ? `${def.blurb}${def.sla ? ` SLA: ${def.sla}.` : ""}` : "Every accident-repair claim through the 10-stage SOP. Pick a stage in the side menu, or open Code Red for anything overdue."}
+        description={def ? `${def.blurb} SLA: ${slaSummary(def.no)}.` : "Every accident-repair claim through the 10-stage SOP. Pick a stage in the side menu, or open Code Red for anything overdue."}
         actions={<ClaimsActions withReset={!stage} />}
       />
       <StatsBar />

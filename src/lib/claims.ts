@@ -1,24 +1,18 @@
 /* ───────── Vehicle Claims & Workshop — domain model, SLA rules, sample data ───────── */
 
+import { fmtHours, stageSla } from "./sla-config";
+
 export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
 
-/** The SOP's clocks. Everything the UI shows as "On Track / Approaching / Breached" is derived from these. */
+/** Fixed SOP limits. The timers' thresholds are configurable: see `lib/sla-config`. */
 export const SLA = {
-  /** Stage 5 — Parts Manager places the Yamaha order and records the order number. */
-  order: 5 * HOUR,
-  /** Stage 5 — transit baseline from order to arrival at the Central yard. */
+  /** Stage 5: longest transit ETA a Parts Manager can set, order to arrival at the Central yard. */
   maxTransitDays: 6,
-  /** Stage 6 — dispatch from Central and reach the branch. A lapse raises the Top Management red alert. */
-  central: 12 * HOUR,
-  /** Stage 7 — parts at the branch to repair started on the ramp. */
-  start: 8 * HOUR,
-  /** Stage 8 — repair started to repair complete. */
-  repair: 48 * HOUR,
 } as const;
 
-/** A timer turns yellow once this share of its window is left (transit uses a flat day, see `slaFor`). */
-const WARN_FRACTION = 0.25;
+/** Transit warns a flat day before its ETA, whatever the stage 5 buffer says. */
+const TRANSIT_WARN = DAY;
 
 export type StageNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
@@ -27,8 +21,6 @@ export interface StageDef {
   name: string;
   short: string;
   blurb: string;
-  /** Plain-words SLA for the stage, when it has one */
-  sla?: string;
 }
 
 export const STAGES: StageDef[] = [
@@ -36,10 +28,10 @@ export const STAGES: StageDef[] = [
   { no: 2, name: "Job Card & Claim Number Allocation", short: "Job Card", blurb: "Job card finalised and the official Claim No assigned." },
   { no: 3, name: "Estimation & Insurance Intimation", short: "Estimate", blurb: "Repair estimate prepared and the insurer intimated." },
   { no: 4, name: "Surveyor Showroom Inspection", short: "Survey", blurb: "Surveyor inspects the vehicle; the survey report is approved." },
-  { no: 5, name: "Spare Parts Ordering", short: "Parts Order", blurb: "Parts Manager orders from Yamaha; transit to Central is tracked.", sla: "Order within 5 hours · transit ETA up to 6 days" },
-  { no: 6, name: "Central Dispatch / Transit", short: "In Transit", blurb: "Parts received at Central and dispatched to the branch.", sla: "Reach the branch within 12 hours" },
-  { no: 7, name: "Vehicle Body Repair & Paint", short: "Body & Paint", blurb: "Repair begins on the ramp; the customer is notified with a photo.", sla: "Start within 8 hours of parts arriving" },
-  { no: 8, name: "Final Inspection & Billing", short: "Inspection", blurb: "Mechanical, body and paint work completed against the checklist and inspected.", sla: "Complete within 48 hours" },
+  { no: 5, name: "Spare Parts Ordering", short: "Parts Order", blurb: "Parts Manager orders from Yamaha; transit to Central is tracked." },
+  { no: 6, name: "Central Dispatch / Transit", short: "In Transit", blurb: "Parts received at Central and dispatched to the branch." },
+  { no: 7, name: "Vehicle Body Repair & Paint", short: "Body & Paint", blurb: "Repair begins on the ramp; the customer is notified with a photo." },
+  { no: 8, name: "Final Inspection & Billing", short: "Inspection", blurb: "Mechanical, body and paint work completed against the checklist and inspected." },
   { no: 9, name: "Settlement & Gate Pass", short: "Settlement", blurb: "Total bill, insurance credit and the customer's balance made transparent and settled." },
   { no: 10, name: "Vehicle Delivery & Closure", short: "Delivery", blurb: "Branch Manager approves delivery; gatepass issued and the vehicle handed over." },
 ];
@@ -150,31 +142,49 @@ export interface SlaState {
   totalMs: number;
   remainingMs: number;
   health: Exclude<Health, "done">;
-  /** Stage 6 only: lapse means the Top Management red alert */
+  /** This stage's rule sends an overdue claim to Top Management (see `isEscalated` for when) */
   topManagement: boolean;
+  /** How long past the deadline before it does */
+  escalateAfterMs: number;
 }
 
-const stateOf = (key: string, label: string, startedAt: number, dueAt: number, now: number, warnMs: number, topManagement = false): SlaState => {
+const stateOf = (key: string, label: string, stage: StageNo, startedAt: number, dueAt: number, now: number, warnMs: number): SlaState => {
+  const rule = stageSla(stage);
   const remainingMs = dueAt - now;
-  return { key, label, startedAt, dueAt, totalMs: dueAt - startedAt, remainingMs, health: remainingMs <= 0 ? "breach" : remainingMs <= warnMs ? "warn" : "ok", topManagement };
+  return {
+    key,
+    label,
+    startedAt,
+    dueAt,
+    totalMs: dueAt - startedAt,
+    remainingMs,
+    health: remainingMs <= 0 ? "breach" : remainingMs <= warnMs ? "warn" : "ok",
+    topManagement: rule.escalate,
+    escalateAfterMs: rule.escalateDays * DAY,
+  };
 };
 
-/** The clock that currently applies to a claim, or null when its stage has none. */
+/** Overdue for long enough that the stage's rule has sent it to Top Management. */
+export const isEscalated = (s: SlaState | null): boolean => !!s && s.topManagement && s.health === "breach" && -s.remainingMs >= s.escalateAfterMs;
+
+const PHASE_LABEL: Partial<Record<StageNo, string>> = { 6: "Dispatch & reach branch", 7: "Start repair on ramp", 8: "Complete repair" };
+
+/** The clock that currently applies to a claim, or null once it is delivered. */
 export function slaFor(c: Claim, now: number): SlaState | null {
   if (c.closedAt) return null;
-  switch (c.stage) {
-    case 5:
-      if (!c.parts.orderNo || c.parts.orderedAt === null) return stateOf("5:order", "Place Yamaha order", c.stageEnteredAt, c.stageEnteredAt + SLA.order, now, SLA.order * WARN_FRACTION);
-      return stateOf("5:transit", "Transit to Central (ETA)", c.parts.orderedAt, c.parts.orderedAt + c.parts.etaDays * DAY, now, DAY);
-    case 6:
-      return stateOf("6:central", "Dispatch & reach branch", c.stageEnteredAt, c.stageEnteredAt + SLA.central, now, SLA.central * WARN_FRACTION, true);
-    case 7:
-      return stateOf("7:start", "Start repair on ramp", c.stageEnteredAt, c.stageEnteredAt + SLA.start, now, SLA.start * WARN_FRACTION);
-    case 8:
-      return stateOf("8:repair", "Complete repair", c.stageEnteredAt, c.stageEnteredAt + SLA.repair, now, SLA.repair * WARN_FRACTION);
-    default:
-      return null;
-  }
+  const rule = stageSla(c.stage);
+  const dur = rule.durationH * HOUR;
+  const warn = rule.warnH * HOUR;
+  if (c.stage === 5 && c.parts.orderNo && c.parts.orderedAt !== null) return stateOf("5:transit", "Transit to Central (ETA)", 5, c.parts.orderedAt, c.parts.orderedAt + c.parts.etaDays * DAY, now, TRANSIT_WARN);
+  const key = c.stage === 5 ? "5:order" : c.stage === 6 ? "6:central" : c.stage === 7 ? "7:start" : c.stage === 8 ? "8:repair" : `${c.stage}:stage`;
+  const label = c.stage === 5 ? "Place Yamaha order" : (PHASE_LABEL[c.stage] ?? `Complete ${stageDef(c.stage).short}`);
+  return stateOf(key, label, c.stage, c.stageEnteredAt, c.stageEnteredAt + dur, now, warn);
+}
+
+/** The stage's SLA in plain words, from the thresholds currently in force. */
+export function slaSummary(no: StageNo): string {
+  const h = fmtHours(stageSla(no).durationH);
+  return no === 5 ? `Order within ${h} · transit ETA up to ${SLA.maxTransitDays} days` : `Complete within ${h}`;
 }
 
 export const healthOf = (c: Claim, now: number): Health => (c.closedAt ? "done" : (slaFor(c, now)?.health ?? "ok"));
@@ -183,21 +193,14 @@ export const HEALTH_LABEL: Record<Health, string> = { ok: "On Track", warn: "App
 
 /** Whether completing the current stage right now would be late (recorded in the stage log). */
 function lateAt(c: Claim, now: number): { dueAt?: number; breached: boolean } {
-  switch (c.stage) {
-    case 5: {
-      const orderLate = (c.parts.orderedAt ?? now) > c.stageEnteredAt + SLA.order;
-      const dueAt = (c.parts.orderedAt ?? now) + c.parts.etaDays * DAY;
-      return { dueAt, breached: orderLate || now > dueAt };
-    }
-    case 6:
-      return { dueAt: c.stageEnteredAt + SLA.central, breached: now > c.stageEnteredAt + SLA.central };
-    case 7:
-      return { dueAt: c.stageEnteredAt + SLA.start, breached: now > c.stageEnteredAt + SLA.start };
-    case 8:
-      return { dueAt: c.stageEnteredAt + SLA.repair, breached: now > c.stageEnteredAt + SLA.repair };
-    default:
-      return { breached: false };
+  const dur = stageSla(c.stage).durationH * HOUR;
+  if (c.stage === 5) {
+    const orderedAt = c.parts.orderedAt ?? now;
+    const dueAt = orderedAt + c.parts.etaDays * DAY;
+    return { dueAt, breached: orderedAt > c.stageEnteredAt + dur || now > dueAt };
   }
+  const dueAt = c.stageEnteredAt + dur;
+  return { dueAt, breached: now > dueAt };
 }
 
 /* ───────── Money ───────── */

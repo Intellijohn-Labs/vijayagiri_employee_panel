@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/overlay";
 import { Select } from "@/components/ui/popover";
 import { Input, Textarea } from "@/components/ui/primitives";
-import { HealthBadge, SlaChip, useClaimHealth } from "./sla";
+import { HealthBadge, SlaChip, useClaimEscalated, useClaimHealth } from "./sla";
 import { TapLink, secondaryLinkClass } from "./ui";
 import { BikeThumb, PlateBadge } from "./vehicle";
 
@@ -138,7 +138,7 @@ export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, s
   const branch = byId(claim.branchId);
   const remark = latestRemark(claim);
   const st = stageDef(claim.stage);
-  const top = !!phase?.topManagement && health === "breach";
+  const top = useClaimEscalated(claim);
   const alert = overdueAlert(health === "breach");
 
   const advance = () => {

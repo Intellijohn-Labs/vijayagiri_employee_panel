@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useVisibleClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
-import { healthOf, slaFor, type Claim, type Health, type StageNo } from "@/lib/claims";
+import { healthOf, isEscalated, slaFor, type Claim, type Health, type StageNo } from "@/lib/claims";
 import { useClock } from "./sla";
 
 /** Counts the sidebar and tiles show, all live. Claims the employee can't see are never counted. */
@@ -24,7 +24,7 @@ export function useClaimStats() {
         breached.push(c);
       } else if (h === "ok") onTrack++;
     }
-    const topManagement = breached.filter((c) => slaFor(c, now)?.topManagement).length;
+    const topManagement = breached.filter((c) => isEscalated(slaFor(c, now))).length;
     return { total: claims.length, open: open.length, onTrack, perStage, breachPerStage, breached, breachCount: breached.length, topManagement };
   }, [claims, now]);
 }
