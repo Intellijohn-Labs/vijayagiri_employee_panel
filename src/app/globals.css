@@ -229,10 +229,23 @@ html.theme-transition *::after {
   animation: redPulse var(--beat) ease-in-out infinite;
 }
 
-/* Liquid level on claim cards: a wave crest drifts along the top of the fill. The wave tile is 40px wide, so a 40px slide loops seamlessly. */
-@keyframes liquidDrift {
-  to {
-    transform: translate3d(-40px, 0, 0);
+/* Liquid on claim cards. The wave layers are twice the card's width and slide half of it, one full wave, so they loop seamlessly. */
+@keyframes waveFront {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes liquidBob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -2px, 0);
   }
 }
 
@@ -242,27 +255,70 @@ html.theme-transition *::after {
     opacity: 1;
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.6;
   }
 }
 
-.liquid-crest {
-  width: calc(100% + 40px);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 5Q10 0 20 5T40 5V10H0Z'/%3E%3C/svg%3E") repeat-x left bottom / 40px 100%;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 5Q10 0 20 5T40 5V10H0Z'/%3E%3C/svg%3E") repeat-x left bottom / 40px 100%;
-  animation: liquidDrift 4s linear infinite;
+@keyframes bubbleRise {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(0, var(--rise, -120px), 0) scale(1);
+    opacity: 0;
+  }
+}
+
+.wave-front,
+.wave-back,
+.liquid-waves,
+.liquid-bubble {
   will-change: transform;
 }
 
-/* An overdue crest drifts too and breathes on the Code Red beat. */
-.liquid-crest-hot {
-  animation: liquidDrift 4s linear infinite, liquidPulse var(--beat) ease-in-out infinite;
+.wave-front {
+  animation: waveFront 4s linear infinite;
+}
+
+.wave-back {
+  animation: waveFront 6s linear infinite reverse;
+}
+
+.liquid-waves {
+  animation: liquidBob 3.2s ease-in-out infinite;
+}
+
+/* Overdue fluid is agitated: faster slosh, a quicker bob, and a pulse on the Code Red beat. */
+.liquid-hot .wave-front {
+  animation-duration: 2.5s;
+}
+
+.liquid-hot .wave-back {
+  animation-duration: 3.6s;
+}
+
+.liquid-hot .liquid-waves {
+  animation: liquidBob 1.4s ease-in-out infinite, liquidPulse var(--beat) ease-in-out infinite;
+}
+
+.liquid-bubble {
+  animation: bubbleRise 3s ease-in infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .liquid-crest,
-  .liquid-crest-hot {
+  .wave-front,
+  .wave-back,
+  .liquid-waves,
+  .liquid-hot .liquid-waves,
+  .liquid-bubble {
     animation: none;
+  }
+  .liquid-bubble {
+    display: none;
   }
   .horizon-grid,
   .red-pulse,
