@@ -19,6 +19,7 @@ import { Select } from "@/components/ui/popover";
 import { Input, Textarea } from "@/components/ui/primitives";
 import { HealthBadge, SlaChip, useClaimEscalated, useClaimHealth } from "./sla";
 import { useBeatSync } from "./beat";
+import { LiquidFill } from "./liquid";
 import { TapLink, secondaryLinkClass } from "./ui";
 import { BikeThumb, PlateBadge } from "./vehicle";
 
@@ -160,7 +161,8 @@ export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, s
 
   return (
     <motion.li custom={index} variants={cardIn} className="min-w-0">
-      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("flex h-full flex-col p-4", cardShell, SURFACE[health], alert.className)} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
+      <motion.article whileHover={{ y: -3 }} transition={springFirm} className={cn("relative flex h-full flex-col p-4 [&>*:not([data-liquid])]:relative [&>*:not([data-liquid])]:z-10", cardShell, SURFACE[health], alert.className)} onPointerEnter={alert.onPointerEnter} onClick={alert.onClick}>
+        <LiquidFill claim={claim} />
         <header className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate font-mono text-[12px] text-muted">{claim.claimNo || claim.ref}</p>

@@ -229,7 +229,41 @@ html.theme-transition *::after {
   animation: redPulse var(--beat) ease-in-out infinite;
 }
 
+/* Liquid level on claim cards: a wave crest drifts along the top of the fill. The wave tile is 40px wide, so a 40px slide loops seamlessly. */
+@keyframes liquidDrift {
+  to {
+    transform: translate3d(-40px, 0, 0);
+  }
+}
+
+@keyframes liquidPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.liquid-crest {
+  width: calc(100% + 40px);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 5Q10 0 20 5T40 5V10H0Z'/%3E%3C/svg%3E") repeat-x left bottom / 40px 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 5Q10 0 20 5T40 5V10H0Z'/%3E%3C/svg%3E") repeat-x left bottom / 40px 100%;
+  animation: liquidDrift 4s linear infinite;
+  will-change: transform;
+}
+
+/* An overdue crest drifts too and breathes on the Code Red beat. */
+.liquid-crest-hot {
+  animation: liquidDrift 4s linear infinite, liquidPulse var(--beat) ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .liquid-crest,
+  .liquid-crest-hot {
+    animation: none;
+  }
   .horizon-grid,
   .red-pulse,
   .radar-ring,

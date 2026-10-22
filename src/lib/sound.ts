@@ -118,7 +118,7 @@ export function playMildAlertBeep() {
 
 /** The default gap between beeps, and the period every Code Red animation pulses at. */
 export const BEAT_MS = 1200;
-const BEAT_ANIMATIONS = new Set(["radarRing", "beaconGlow", "sirenBeat", "redPulse"]);
+const BEAT_ANIMATIONS = new Set(["radarRing", "beaconGlow", "sirenBeat", "redPulse", "liquidPulse"]);
 
 let loopOn = false;
 let loopMs = BEAT_MS;
