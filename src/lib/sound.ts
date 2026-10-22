@@ -41,6 +41,25 @@ function rev(from: number, to: number, seconds: number, gain: number, force = fa
 }
 
 export const sfx = {
+  /** Code Red: a soft, low double chirp. Plays only when the user has switched the alert sound on, which is the gesture that unlocks audio. */
+  alert: () => {
+    const a = audio(true);
+    if (!a) return;
+    [330, 392].forEach((f, i) => {
+      const t = a.currentTime + i * 0.16;
+      const osc = a.createOscillator();
+      const amp = a.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f, t);
+      osc.frequency.exponentialRampToValueAtTime(f * 1.12, t + 0.1);
+      amp.gain.setValueAtTime(0.0001, t);
+      amp.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      osc.connect(amp).connect(a.destination);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    });
+  },
   /** One keystroke: a short throttle blip. */
   blip: () => rev(70, 130, 0.12, 0.05),
   /** Launch control: the full rev as the dashboard opens. */

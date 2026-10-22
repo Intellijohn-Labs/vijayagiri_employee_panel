@@ -148,8 +148,47 @@ html.theme-transition *::after {
   }
 }
 
+/* Code Red radar: two ripple rings leave the siren, and the card's glow beats like a heart (lub-dub, rest). */
+@keyframes radarRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes beaconGlow {
+  0%,
+  40%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--danger) / 0.25), 0 2px 10px -2px rgb(var(--danger) / 0.35);
+  }
+  14%,
+  28% {
+    box-shadow: 0 0 0 5px rgb(var(--danger) / 0.18), 0 0 26px 2px rgb(var(--danger) / 0.7);
+  }
+}
+
+.radar-ring {
+  animation: radarRing 2s ease-out infinite;
+}
+
+.radar-ring-late {
+  animation: radarRing 2s ease-out 1s infinite;
+}
+
+.beacon-glow {
+  animation: beaconGlow 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .horizon-grid {
+  .horizon-grid,
+  .radar-ring,
+  .radar-ring-late,
+  .beacon-glow {
     animation: none;
   }
 }

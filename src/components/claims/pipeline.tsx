@@ -2,9 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { Check, Siren } from "lucide-react";
+import { motion } from "framer-motion";
+import { Check, Siren, Volume2, VolumeX } from "lucide-react";
 import { STAGES, type StageNo } from "@/lib/claims";
+import { sfx } from "@/lib/sound";
+import { springFirm } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { useAlertSound } from "@/store/alert-sound-store";
 import { useClaimStats } from "./stats";
 
 /** Summary pills under the page title: what is running, what is on schedule and what has lapsed its SLA. */
@@ -25,33 +29,62 @@ export function StatsBar() {
   );
 }
 
-/** The emergency filter, kept apart from the numbered SOP line: overdue count, one click to the Code Red view. */
+/** The emergency filter, kept apart from the numbered SOP line: a radar-style card with the overdue count, one click to the Code Red view. */
 function CodeRedHub() {
   const { breachCount, topManagement } = useClaimStats();
+  const { enabled, hydrate, set } = useAlertSound();
   const hot = breachCount > 0;
+  const seen = useRef(breachCount);
+
+  useEffect(hydrate, [hydrate]);
+  // Chirp when a new breach appears. Browsers only allow audio after a tap or key press, so stay quiet until then.
+  useEffect(() => {
+    if (enabled && breachCount > seen.current && navigator.userActivation?.hasBeenActive) sfx.alert();
+    seen.current = breachCount;
+  }, [breachCount, enabled]);
+
   return (
-    <Link
-      href="/claims/code-red"
-      className={cn(
-        "flex shrink-0 items-center gap-3 rounded-xl border p-3 outline-none transition-colors focus-visible:shadow-ring lg:w-60",
-        hot ? "border-danger bg-danger text-white hover:opacity-90" : "border-line bg-surface shadow-card hover:border-strong",
-      )}
-    >
-      <span className={cn("relative grid h-10 w-10 shrink-0 place-items-center rounded-full", hot ? "bg-white/20" : "bg-hover text-muted")}>
-        {hot && <span className="absolute inset-0 animate-ping rounded-full bg-white/30" />}
-        <Siren className={cn("relative h-5 w-5", hot && "animate-pulse")} />
-      </span>
-      <span className="min-w-0">
-        <span className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-semibold tabular-nums leading-none">{breachCount}</span>
-          <span className="text-[12px] font-semibold">Code Red</span>
+    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.99 }} transition={springFirm} className={cn("relative shrink-0 rounded-xl lg:w-60", hot && "beacon-glow")}>
+      <Link
+        href="/claims/code-red"
+        onClick={() => enabled && hot && sfx.alert()}
+        className={cn(
+          "flex h-full cursor-pointer items-center gap-3 overflow-hidden rounded-xl border p-3 pr-9 outline-none transition-colors focus-visible:shadow-ring",
+          hot ? "border-danger bg-danger text-white" : "border-line bg-surface shadow-card hover:border-strong",
+        )}
+      >
+        <span className={cn("relative grid h-10 w-10 shrink-0 place-items-center rounded-full", hot ? "bg-white/20" : "bg-hover text-muted")}>
+          {hot && (
+            <>
+              <span aria-hidden className="radar-ring absolute inset-0 rounded-full border-2 border-white/70" />
+              <span aria-hidden className="radar-ring-late absolute inset-0 rounded-full border-2 border-white/70" />
+            </>
+          )}
+          <Siren className={cn("relative h-5 w-5", hot && "animate-pulse")} />
         </span>
-        <span className={cn("mt-1 block text-[11px] leading-4", hot ? "text-white/90" : "text-muted")}>
-          {hot ? "Requires Immediate Action" : "All clear, no SLA breaches"}
-          {topManagement > 0 && <span className="block">{topManagement} sent to Top Management</span>}
+        <span className="min-w-0">
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-3xl font-bold tabular-nums leading-none">{breachCount}</span>
+            <span className="text-[13px] font-semibold">Code Red</span>
+          </span>
+          <span className={cn("mt-1 block text-[11px] leading-4", hot ? "font-semibold uppercase tracking-wide text-white" : "text-muted")}>{hot ? "Requires Immediate Action" : "All clear, no SLA breaches"}</span>
+          {topManagement > 0 && <span className="block text-[11px] leading-4 text-white/85">{topManagement} sent to Top Management</span>}
         </span>
-      </span>
-    </Link>
+      </Link>
+      <button
+        type="button"
+        aria-pressed={enabled}
+        aria-label={enabled ? "Mute Code Red alert sound" : "Unmute Code Red alert sound"}
+        title={enabled ? "Alert sound on" : "Alert sound off"}
+        onClick={() => {
+          set(!enabled);
+          if (!enabled) sfx.alert();
+        }}
+        className={cn("absolute right-1.5 top-1.5 grid h-6 w-6 cursor-pointer place-items-center rounded-md outline-none transition-colors focus-visible:shadow-ring", hot ? "text-white/80 hover:bg-white/20 hover:text-white" : "text-muted hover:bg-hover hover:text-fg")}
+      >
+        {enabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+      </button>
+    </motion.div>
   );
 }
 
