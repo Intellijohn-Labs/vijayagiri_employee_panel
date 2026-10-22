@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2, Plus } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useBranches } from "@/store/branch-store";
 import { useClaims } from "@/store/claims-store";
 import { toast } from "@/store/toast-store";
-import { nextRef, type Intake } from "@/lib/claims";
+import { nextRef, normalizeRegNo, type Intake } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/overlay";
-import { IntakeFields, validateIntake, type IntakeErrors } from "./intake";
+import { IntakeFields, focusFirstError, validateIntake } from "./intake";
 
 /**
  * Stage 1, the quick check-in: customer, vehicle, insurance, damage and a photo. Submitting opens the claim,
@@ -35,15 +35,22 @@ export function NewClaimForm({ onDone, onCancel }: { onDone?: () => void; onCanc
     policyNo: "",
     damage: "",
   }));
-  const [errors, setErrors] = useState<IntakeErrors>({});
+  // Nothing is flagged until the first attempt to submit; after that the messages follow what is typed.
+  const [tried, setTried] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const errors = tried ? validateIntake(draft) : {};
   const ref = draft.branchId ? nextRef(claims, draft.branchId) : "Choose a showroom to generate";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    setTried(true);
     const found = validateIntake(draft);
-    setErrors(found);
-    if (Object.keys(found).length) return void toast.error("Some details need fixing", "Check the highlighted fields.");
-    const claim = create({ ...draft, regNo: draft.regNo.trim().toUpperCase(), altPhone: draft.altPhone?.trim() || undefined });
+    if (Object.keys(found).length) {
+      toast.error("Please fill in all mandatory fields before moving to Stage 2", "Check the fields marked in red.");
+      focusFirstError(form.current, found);
+      return;
+    }
+    const claim = create({ ...draft, customerName: draft.customerName.trim(), regNo: normalizeRegNo(draft.regNo) ?? draft.regNo.trim().toUpperCase(), altPhone: draft.altPhone?.trim() || undefined });
     const moved = complete(claim.id);
     toast.success(`Claim ${claim.ref} opened`, moved.ok ? "Stage 1 is done. Fill in the official Job Card at Stage 2." : "Review the details and complete Stage 1 to move on.");
     onDone?.();
@@ -51,7 +58,7 @@ export function NewClaimForm({ onDone, onCancel }: { onDone?: () => void; onCanc
   };
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-5">
+    <form ref={form} onSubmit={submit} noValidate className="space-y-5">
       <p className="rounded-lg border border-line bg-hover/60 px-3 py-2 text-[12px] text-muted">
         Claim reference <span className="ml-1 font-mono font-semibold text-fg">{ref}</span>. The Job Card number and official Claim No. are assigned at Stage 2.
       </p>

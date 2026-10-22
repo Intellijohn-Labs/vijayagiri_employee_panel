@@ -288,11 +288,11 @@ export function missingFor(c: Claim): string[] {
   const m: string[] = [];
   switch (c.stage) {
     case 1:
-      if (!c.customerName.trim()) m.push("Customer name");
-      if (c.phone.replace(/\D/g, "").length < 10) m.push("A 10-digit customer phone number");
-      if (!c.regNo.trim()) m.push("Vehicle registration number");
+      if (c.customerName.trim().length < 2) m.push("Customer name (at least 2 characters)");
+      if (!isIndianMobile(c.phone)) m.push("A valid 10-digit mobile number");
+      if (!normalizeRegNo(c.regNo)) m.push("A valid registration number (like KL-40-AB-1234)");
       if (!c.model.trim()) m.push("Vehicle model");
-      if (!c.damage.trim()) m.push("Damage description");
+      if (c.damage.trim().length < 5) m.push("Damage summary (at least 5 characters)");
       break;
     case 2: {
       const j = jobCardOf(c);
@@ -389,6 +389,21 @@ export function formatSpan(ms: number): string {
 
 export const fmtDateTime = (ts: number) => new Date(ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true });
 export const fmtDay = (ts: number) => new Date(ts).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+/** A 10-digit Indian mobile number (starts 6 to 9), with an optional +91, 91 or 0 in front and any spacing. */
+export function isIndianMobile(phone: string): boolean {
+  let d = phone.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d);
+}
+
+const REG_NO = /^([A-Z]{2})(\d{1,2})([A-Z]{1,3})(\d{1,4})$/;
+/** A registration number in the standard KL-40-AB-1234 form, or null when it doesn't look like one. Spaces and hyphens are optional on input. */
+export function normalizeRegNo(reg: string): string | null {
+  const m = REG_NO.exec(reg.toUpperCase().replace(/[\s-]/g, ""));
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3]}-${m[4]}` : null;
+}
 
 export const YAMAHA_MODELS = ["MT-15 V2", "YZF R15 V4 / R15M", "FZS-FI V4", "FZ-X", "Aerox 155", "RayZR 125 Fi Hybrid", "Fascino 125 Fi Hybrid", "YZF R3"];
 

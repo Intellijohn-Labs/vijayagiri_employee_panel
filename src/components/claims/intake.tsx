@@ -5,7 +5,7 @@ import { Camera, ImagePlus, Trash2 } from "lucide-react";
 import { useBranchTools } from "@/store/branch-store";
 import { branchLabel } from "@/lib/branches";
 import { INSURERS } from "@/lib/insurance";
-import { YAMAHA_MODELS, type Intake } from "@/lib/claims";
+import { YAMAHA_MODELS, isIndianMobile, normalizeRegNo, type Intake } from "@/lib/claims";
 import { photoToDataUrl } from "@/lib/image";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,23 +15,40 @@ import { PhotoThumb } from "./vehicle";
 
 export type IntakeErrors = Partial<Record<keyof Intake, string>>;
 
+/** The form's fields in the order they appear, so the first invalid one can be found and focused. */
+const FIELD_ORDER: (keyof Intake)[] = ["branchId", "customerName", "phone", "altPhone", "model", "regNo", "damage"];
+
 /** Required check-in fields; returns an error per missing or malformed one. */
 export function validateIntake(v: Intake): IntakeErrors {
   const e: IntakeErrors = {};
-  if (!v.branchId) e.branchId = "Choose the showroom";
+  if (!v.branchId) e.branchId = "Choose the showroom or workshop";
   if (!v.customerName.trim()) e.customerName = "Enter the customer's name";
-  if (v.phone.replace(/\D/g, "").length < 10) e.phone = "Enter a 10-digit mobile number";
+  else if (v.customerName.trim().length < 2) e.customerName = "The name needs at least 2 characters";
+  if (!v.phone.trim()) e.phone = "Enter the primary phone number";
+  else if (!isIndianMobile(v.phone)) e.phone = "Enter a valid 10-digit mobile number (starts with 6 to 9)";
   if (v.altPhone?.trim() && v.altPhone.replace(/\D/g, "").length < 10) e.altPhone = "Enter a 10-digit number or leave it blank";
+  if (!v.model.trim()) e.model = "Select the vehicle model";
+  else if (!YAMAHA_MODELS.includes(v.model)) e.model = "Select a Yamaha model from the list";
   if (!v.regNo.trim()) e.regNo = "Enter the registration number";
-  if (!v.model.trim()) e.model = "Choose the vehicle model";
-  if (!v.damage.trim()) e.damage = "Briefly describe the damage";
+  else if (!normalizeRegNo(v.regNo)) e.regNo = "Use the format KL-40-AB-1234";
+  if (!v.damage.trim()) e.damage = "Describe the damage";
+  else if (v.damage.trim().length < 5) e.damage = "Add a little more detail (at least 5 characters)";
   return e;
+}
+
+/** Scrolls to and focuses the first field in `errors`. `root` is the element that holds the IntakeFields. */
+export function focusFirstError(root: HTMLElement | null, errors: IntakeErrors) {
+  const first = FIELD_ORDER.find((k) => errors[k]);
+  const el = first && root?.querySelector<HTMLElement>(`[data-field="${first}"] :is(input, textarea, button)`);
+  if (!el) return;
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.focus({ preventScroll: true });
 }
 
 /** A registration number on an Indian-style plate: blue IND strip, bold capitals. */
 function PlateInput({ value, onChange, invalid, disabled }: { value: string; onChange: (v: string) => void; invalid?: boolean; disabled?: boolean }) {
   return (
-    <div className={cn("flex h-9 overflow-hidden rounded-md border bg-white shadow-card", invalid ? "border-danger" : "border-slate-700/70", disabled && "opacity-60")}>
+    <div className={cn("flex h-9 overflow-hidden rounded-md border bg-white shadow-card", invalid ? "border-red-500 focus-within:ring-2 focus-within:ring-red-500/40" : "border-slate-700/70", disabled && "opacity-60")}>
       <span aria-hidden className="grid w-9 shrink-0 place-items-center bg-[#003399] text-[9px] font-bold tracking-wide text-white">
         IND
       </span>
@@ -162,30 +179,44 @@ export function IntakeFields({ value, onChange, errors = {}, showBranch, readOnl
   return (
     <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       {showBranch && (
-        <Field label="Showroom / workshop" required error={errors.branchId} className="sm:col-span-2">
-          <Select<string> value={value.branchId || null} onChange={(v) => set("branchId", v)} placeholder="Choose a showroom" invalid={!!errors.branchId} disabled={readOnly} options={branches.map((b) => ({ value: b.id, label: branchLabel(b) }))} />
-        </Field>
+        <div data-field="branchId" className="contents">
+          <Field label="Showroom / workshop" required error={errors.branchId} className="sm:col-span-2">
+            <Select<string> value={value.branchId || null} onChange={(v) => set("branchId", v)} placeholder="Choose a showroom" invalid={!!errors.branchId} disabled={readOnly} options={branches.map((b) => ({ value: b.id, label: branchLabel(b) }))} />
+          </Field>
+        </div>
       )}
-      <Field label="Customer name" required error={errors.customerName}>
-        {text("customerName", "As on the RC book", { autoComplete: "off" })}
-      </Field>
-      <Field label="Primary phone number" required error={errors.phone}>
-        {text("phone", "98470 00000", { inputMode: "tel", autoComplete: "off" })}
-      </Field>
-      <Field label="Alternate number" hint="Optional" error={errors.altPhone}>
-        {text("altPhone", "98470 00000", { inputMode: "tel", autoComplete: "off" })}
-      </Field>
-      <Field label="Vehicle model" required error={errors.model}>
-        <Select<string> value={value.model || null} onChange={(v) => set("model", v)} placeholder="Choose the model" searchable invalid={!!errors.model} disabled={readOnly} options={models.map((m) => ({ value: m, label: m }))} />
-      </Field>
-      <div className="sm:col-span-2">
+      <div data-field="customerName" className="contents">
+        <Field label="Customer name" required error={errors.customerName}>
+          {text("customerName", "As on the RC book", { autoComplete: "off" })}
+        </Field>
+      </div>
+      <div data-field="phone" className="contents">
+        <Field label="Primary phone number" required error={errors.phone}>
+          {text("phone", "98470 00000", { inputMode: "tel", autoComplete: "off" })}
+        </Field>
+      </div>
+      <div data-field="altPhone" className="contents">
+        <Field label="Alternate number" hint="Optional" error={errors.altPhone}>
+          {text("altPhone", "98470 00000", { inputMode: "tel", autoComplete: "off" })}
+        </Field>
+      </div>
+      <div data-field="model" className="contents">
+        <Field label="Vehicle model" required error={errors.model}>
+          <Select<string> value={value.model || null} onChange={(v) => set("model", v)} placeholder="Choose the model" searchable invalid={!!errors.model} disabled={readOnly} options={models.map((m) => ({ value: m, label: m }))} />
+        </Field>
+      </div>
+      <div data-field="regNo" className="sm:col-span-2">
         <p className="mb-1.5 text-xs font-medium text-fg">
           Registration number<span className="ml-0.5 text-accent-text">*</span>
         </p>
         <div className="sm:max-w-xs">
           <PlateInput value={value.regNo} onChange={(v) => set("regNo", v)} invalid={!!errors.regNo} disabled={readOnly} />
         </div>
-        {errors.regNo && <p className="mt-1 text-[11.5px] text-danger">{errors.regNo}</p>}
+        {errors.regNo && (
+          <p role="alert" className="mt-1 text-[11.5px] text-danger">
+            {errors.regNo}
+          </p>
+        )}
       </div>
       <Field label="Insurance company" hint="Optional">
         <Select<string> value={value.insurer || null} onChange={(v) => set("insurer", v)} placeholder="Choose the insurer" disabled={readOnly} options={INSURERS.map((i) => ({ value: i, label: i }))} />
@@ -193,9 +224,11 @@ export function IntakeFields({ value, onChange, errors = {}, showBranch, readOnl
       <Field label="Policy number" hint="Optional">
         {text("policyNo", "Policy number", { className: "font-mono" })}
       </Field>
-      <Field label="Accident / damage summary" required error={errors.damage} className="sm:col-span-2">
-        <Textarea value={value.damage} onChange={(e) => set("damage", e.target.value)} placeholder="Brief issue: what was damaged and how" invalid={!!errors.damage} disabled={readOnly} rows={3} />
-      </Field>
+      <div data-field="damage" className="contents">
+        <Field label="Accident / damage summary" required error={errors.damage} className="sm:col-span-2">
+          <Textarea value={value.damage} onChange={(e) => set("damage", e.target.value)} placeholder="Brief issue: what was damaged and how" invalid={!!errors.damage} disabled={readOnly} rows={3} />
+        </Field>
+      </div>
       <PhotoField value={value.vehicleImage} onChange={(v) => set("vehicleImage", v)} readOnly={readOnly} />
     </div>
   );
