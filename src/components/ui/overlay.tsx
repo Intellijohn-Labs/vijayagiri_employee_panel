@@ -100,3 +100,27 @@ export function Drawer({ open, onClose, title, description, children, footer, wi
     document.body,
   );
 }
+
+/** A light image preview: the photo on a dimmed backdrop. Click outside, press Esc or use the button to close. */
+export function Lightbox({ open, onClose, src, title }: { open: boolean; onClose: () => void; src: string; title: string }) {
+  const panel = useRef<HTMLDivElement>(null);
+  useOverlayBehaviour(open, onClose, panel);
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="fixed inset-0 z-[60] grid place-items-center p-4" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
+          <motion.div ref={panel} role="dialog" aria-modal="true" aria-label={title} initial={{ scale: 0.96 }} animate={{ scale: 1 }} exit={{ scale: 0.97 }} className="relative max-h-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            {/* biome-ignore lint/performance/noImgElement: a data URL the user just uploaded, which next/image cannot optimise */}
+            <img src={src} alt={title} className="max-h-[85vh] w-auto max-w-full rounded-xl bg-white object-contain shadow-pop" />
+            <Button variant="secondary" size="sm" iconOnly onClick={onClose} aria-label="Close preview" className="absolute right-2 top-2">
+              <X className="h-4 w-4" />
+            </Button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}

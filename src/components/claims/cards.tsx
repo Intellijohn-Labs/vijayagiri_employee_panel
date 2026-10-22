@@ -21,7 +21,7 @@ import { HealthBadge, SlaChip, useClaimEscalated, useClaimHealth } from "./sla";
 import { useBeatSync } from "./beat";
 import { LiquidFill } from "./liquid";
 import { TapLink, secondaryLinkClass } from "./ui";
-import { BikeThumb, PlateBadge } from "./vehicle";
+import { ClaimThumb, PlateBadge } from "./vehicle";
 
 const telHref = (phone: string) => `tel:+${phone.replace(/\D/g, "").replace(/^(\d{10})$/, "91$1")}`;
 const latestRemark = (c: Claim) => c.events.filter((e) => e.kind === "remark").sort((a, z) => z.at - a.at)[0];
@@ -172,7 +172,7 @@ export const VehicleCard = memo(function VehicleCard({ claim, index, onRemark, s
         </header>
 
         <div className="mt-3 flex items-center gap-3">
-          <BikeThumb model={claim.model} />
+          <ClaimThumb claim={claim} />
           <div className="min-w-0">
             <h3 className="truncate text-[15px] font-semibold leading-5 text-fg">{claim.customerName}</h3>
             <a href={telHref(claim.phone)} className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted outline-none hover:text-fg focus-visible:underline">

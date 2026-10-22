@@ -18,7 +18,7 @@ import { useCodeRedBeeper, useBeatSync } from "@/components/claims/beat";
 import { useClock } from "@/components/claims/sla";
 import { matchesFilters, useClaimStats } from "@/components/claims/stats";
 import { Fact, TapAnchor, TapLink, secondaryLinkClass } from "@/components/claims/ui";
-import { BikeThumb, PlateBadge } from "@/components/claims/vehicle";
+import { ClaimThumb, PlateBadge } from "@/components/claims/vehicle";
 import { ClaimsActions } from "@/components/claims/workspace";
 
 type Row = { claim: Claim; sla: SlaState };
@@ -68,7 +68,7 @@ const AlertCard = memo(function AlertCard({ row, index, onRemark }: { row: Row; 
             </Fact>
             <Fact label="Vehicle">
               <span className="flex items-center gap-2.5">
-                <BikeThumb model={c.model} className="h-9 w-14" />
+                <ClaimThumb claim={c} className="h-9 w-14" />
                 <span className="min-w-0">
                   <span className="block truncate">{c.model}</span>
                   <PlateBadge regNo={c.regNo} className="mt-0.5" />

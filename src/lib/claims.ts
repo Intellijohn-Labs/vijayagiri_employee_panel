@@ -112,6 +112,8 @@ export interface Claim {
   policyNo: string;
   accidentDate: string;
   damage: string;
+  /** Check-in / damage photo uploaded at intake, as a compressed JPEG data URL. Cards show the catalogue picture without one. */
+  vehicleImage?: string;
 
   jobCard: { date: string; advisor: string; notes: string };
   estimate: { lines: EstimateLine[]; intimationDate: string; intimationMode: (typeof INTIMATION_MODES)[number]; intimationRef: string; notes: string };
@@ -323,7 +325,7 @@ export const defaultChecklist = (): ChecklistItem[] => {
   ];
 };
 
-export type Intake = Pick<Claim, "branchId" | "customerName" | "phone" | "email" | "address" | "regNo" | "model" | "chassisNo" | "odometer" | "insurer" | "policyNo" | "accidentDate" | "damage" | "jobCardNo">;
+export type Intake = Pick<Claim, "branchId" | "customerName" | "phone" | "email" | "address" | "regNo" | "model" | "chassisNo" | "odometer" | "insurer" | "policyNo" | "accidentDate" | "damage" | "jobCardNo" | "vehicleImage">;
 
 /** A new claim at stage 1 with every later stage empty. */
 export function blankClaim(i: Intake, id: string, ref: string, by: string, now: number): Claim {
