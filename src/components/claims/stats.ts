@@ -15,15 +15,17 @@ export function useClaimStats() {
     const perStage = Array.from({ length: 11 }, () => 0);
     const breachPerStage = Array.from({ length: 11 }, () => 0);
     const breached: Claim[] = [];
+    let onTrack = 0;
     for (const c of open) {
       perStage[c.stage]++;
-      if (healthOf(c, now) === "breach") {
+      const h = healthOf(c, now);
+      if (h === "breach") {
         breachPerStage[c.stage]++;
         breached.push(c);
-      }
+      } else if (h === "ok") onTrack++;
     }
     const topManagement = breached.filter((c) => slaFor(c, now)?.topManagement).length;
-    return { total: claims.length, open: open.length, perStage, breachPerStage, breached, breachCount: breached.length, topManagement };
+    return { total: claims.length, open: open.length, onTrack, perStage, breachPerStage, breached, breachCount: breached.length, topManagement };
   }, [claims, now]);
 }
 

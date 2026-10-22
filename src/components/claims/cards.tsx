@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, MessageSquarePlus, Phone, Search, Siren } from "lucide-react";
 import { useBranchTools } from "@/store/branch-store";
@@ -207,21 +206,5 @@ export function FilterBar({ trailing }: { trailing?: ReactNode }) {
       </div>
       {trailing}
     </div>
-  );
-}
-
-/** Link to the Code Red hub, with the live breach count. */
-export function CodeRedButton({ count }: { count: number }) {
-  return (
-    <Link
-      href="/claims/code-red"
-      className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-3 text-[13px] font-semibold outline-none transition-colors focus-visible:shadow-ring",
-        count ? "border-danger bg-danger text-white hover:opacity-90" : "border-line bg-surface text-fg hover:bg-hover",
-      )}
-    >
-      <Siren className={cn("h-3.5 w-3.5", count > 0 && "animate-pulse")} /> Code Red
-      <span className={cn("grid h-4 min-w-4 place-items-center rounded-full px-1 text-[11px] tabular-nums", count ? "bg-white text-danger" : "bg-fg/10 text-muted")}>{count}</span>
-    </Link>
   );
 }

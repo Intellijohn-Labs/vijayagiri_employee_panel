@@ -10,16 +10,15 @@ import { stageDef, type StageNo } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { Card, PageHeader } from "@/components/ui/primitives";
-import { CardGrid, CodeRedButton, FilterBar } from "./cards";
+import { CardGrid, FilterBar } from "./cards";
 import { useClaimList, useClaimStats, type StatusFilter } from "./stats";
-import { StageTiles } from "./tiles";
+import { PipelineOverview, StatsBar } from "./pipeline";
 import { buttonLinkClass } from "./ui";
 
 const PAGE = 24;
 
 /** Header actions every Claims list page shares. */
 export function ClaimsActions({ withReset }: { withReset?: boolean }) {
-  const { breachCount } = useClaimStats();
   const resetSample = useClaims((s) => s.resetSample);
   return (
     <>
@@ -34,7 +33,6 @@ export function ClaimsActions({ withReset }: { withReset?: boolean }) {
           Reset demo data
         </Button>
       )}
-      <CodeRedButton count={breachCount} />
       <Link href="/claims/new" className={buttonLinkClass}>
         <Plus className="h-3.5 w-3.5" /> New Claim
       </Link>
@@ -44,7 +42,7 @@ export function ClaimsActions({ withReset }: { withReset?: boolean }) {
 
 /**
  * One workspace for every list page. With a `stage` it is that stage's dedicated view; without one it is the
- * all-claims overview with the pipeline tiles on top.
+ * all-claims overview with the pipeline rail on top.
  */
 export function Workspace({ stage }: { stage?: StageNo }) {
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -72,7 +70,8 @@ export function Workspace({ stage }: { stage?: StageNo }) {
         description={def ? `${def.blurb}${def.sla ? ` SLA: ${def.sla}.` : ""}` : "Every accident-repair claim through the 10-stage SOP. Pick a stage in the side menu, or open Code Red for anything overdue."}
         actions={<ClaimsActions withReset={!stage} />}
       />
-      {!stage && <StageTiles />}
+      <StatsBar />
+      <PipelineOverview active={stage} />
 
       <div className="mb-4">
         <PillTabs id={`claims-status-${stage ?? "all"}`} label="Filter by status" value={status} onChange={(v) => {
