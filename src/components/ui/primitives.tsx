@@ -91,7 +91,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   );
 });
 
-export function Checkbox({ checked, indeterminate, onChange, label, className }: { checked: boolean; indeterminate?: boolean; onChange: (v: boolean) => void; label?: string; className?: string }) {
+export function Checkbox({ checked, indeterminate, onChange, label, className, boxClassName }: { checked: boolean; indeterminate?: boolean; onChange: (v: boolean) => void; label?: string; className?: string; /** Extra classes for the box itself */ boxClassName?: string }) {
   const id = useId();
   return (
     <span className={cn("inline-flex items-center", className)}>
@@ -108,6 +108,7 @@ export function Checkbox({ checked, indeterminate, onChange, label, className }:
         className={cn(
           "grid h-4 w-4 place-items-center rounded-[4px] border transition-colors",
           checked || indeterminate ? "border-accent bg-accent text-accent-fg" : "border-strong bg-surface hover:border-accent/60",
+          boxClassName,
         )}
       >
         <motion.span initial={false} animate={{ scale: checked || indeterminate ? 1 : 0, opacity: checked || indeterminate ? 1 : 0 }} transition={springFirm}>

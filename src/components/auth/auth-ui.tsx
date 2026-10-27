@@ -46,7 +46,7 @@ export function BrandLogo({ className, onDark }: { className?: string; /** Alway
 /* ───────── Inputs ───────── */
 
 const inputCls =
-  "peer h-12 w-full rounded-lg border border-slate-300 bg-white pl-11 pr-3 text-[15px] text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-slate-400 hover:border-slate-400 focus:border-[#0020B2] focus:ring-4 focus:ring-[#0020B2]/15 dark:border-white/10 dark:bg-white/[0.03] dark:text-white dark:placeholder:text-slate-500 dark:hover:border-white/20 dark:focus:border-sky-400 dark:focus:ring-sky-400/15";
+  "peer h-12 w-full rounded-lg border border-slate-300 bg-white pl-11 pr-3 text-[15px] text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-slate-400 hover:border-slate-400 focus:border-[#0020B2] focus:ring-4 focus:ring-[#0020B2]/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-500 dark:hover:border-zinc-600 dark:focus:border-sky-400 dark:focus:ring-sky-400/15 autofill:[-webkit-text-fill-color:#0f172a] autofill:[transition:background-color_5000s_ease-in-out_0s] dark:autofill:[-webkit-text-fill-color:#fff]";
 
 interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> {
   label: string;

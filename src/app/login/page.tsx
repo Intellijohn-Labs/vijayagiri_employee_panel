@@ -300,12 +300,12 @@ export default function LoginPage() {
         {/* floating glass card; the frosted pane stays put while its two faces turn */}
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 240, damping: 26, delay: 0.1 }} className="relative">
           <AnimatePresence>{unlocking && <UnlockLine key="unlock" />}</AnimatePresence>
-          <div aria-hidden className="absolute inset-0 rounded-3xl border border-[#0020B2]/15 bg-white shadow-[0_24px_60px_-24px_rgba(0,32,178,0.28),0_2px_6px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-gradient-to-b dark:from-white/[0.08] dark:to-white/[0.025] dark:shadow-[0_40px_90px_-30px_rgba(0,32,178,0.7),inset_0_1px_0_rgba(255,255,255,0.08)] dark:backdrop-blur-2xl" />
+          <div aria-hidden className="absolute inset-0 rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-[#0020B2]/10 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)]" />
           <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#0050FF] to-transparent" />
           <div className="relative">
             <div data-view={view} className="[perspective:1000px]">
               <div className={`grid [transform-style:preserve-3d] transition-transform duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${isFlipped ? "[transform:rotateY(180deg)]" : ""}`}>
-                <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="p-7 [backface-visibility:hidden] [grid-area:1/1] sm:p-9">
+                <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="rounded-3xl border border-transparent p-7 [backface-visibility:hidden] [grid-area:1/1] dark:border-zinc-800 dark:bg-zinc-950 sm:p-9">
                   <AnimatePresence mode="wait" initial={false}>
                     {gate ? (
                       <PasscodeStep key="passcode" who={gate} stage={stage} onVerified={enter} onBack={() => setGate(null)} />
@@ -352,8 +352,8 @@ export default function LoginPage() {
                   </div>
 
                   <div className="flex items-center justify-between pb-6 pt-4">
-                    <label className="flex cursor-pointer select-none items-center gap-2 text-[13px] text-slate-600 dark:text-slate-400">
-                      <Checkbox checked={remember} onChange={setRemember} label="Remember me" />
+                    <label className="flex cursor-pointer select-none items-center gap-2 text-[13px] text-slate-600 dark:text-zinc-400">
+                      <Checkbox checked={remember} onChange={setRemember} label="Remember me" boxClassName="dark:border-zinc-700 dark:bg-zinc-900 dark:aria-checked:border-blue-600 dark:aria-checked:bg-blue-600" />
                       Remember me
                     </label>
                     <button type="button" onClick={() => flipTo("forgot")} className={`${linkCls} -my-2`}>
@@ -374,7 +374,7 @@ export default function LoginPage() {
                     )}
                   </AnimatePresence>
                 </div>
-                <div ref={back} inert={!isFlipped} aria-hidden={!isFlipped} className="p-7 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)] sm:p-9">
+                <div ref={back} inert={!isFlipped} aria-hidden={!isFlipped} className="rounded-3xl border border-transparent p-7 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)] dark:border-zinc-800 dark:bg-zinc-950 sm:p-9">
                   {backView === "forgot" ? (
                       <ForgotPassword key={backKey} stage={stage} active={isFlipped} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => flipTo("signin")} onDone={() => flipTo("signin")} />
                     ) : (
