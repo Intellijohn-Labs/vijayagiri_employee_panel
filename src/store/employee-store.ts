@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { BASE_BRANCHES } from "@/lib/branches";
 import { EMPLOYEE_ROLES, type Employee, type EmployeeInput, type EmployeeRole, type EmployeeStatus } from "@/lib/employees";
-import { activateAccountAction, checkInviteAction, createEmployee, getEmployees, getSession, signInAction, signOutAction, deleteEmployee, toggleEmployeeStatus, updateEmployee, type ActivationCheck, type AuthResult } from "@/actions/employees";
+import { activateAccountAction, checkInviteAction, createEmployee, getEmployees, getSession, resetEmployeePassword, signInAction, signOutAction, deleteEmployee, toggleEmployeeStatus, updateEmployee, type ActivationCheck, type AuthResult } from "@/actions/employees";
 
 export { EMPLOYEE_ROLES };
 export type { Employee, EmployeeInput, EmployeeRole, EmployeeStatus };
@@ -116,6 +116,12 @@ export async function hashPassword(employeeId: string, password: string): Promis
 /** The only way in: the email (or employee ID) must belong to someone in the directory who is Active, has activated their account, and knows the password. Checked on the server, which also starts the session. */
 export type { AuthResult, ActivationCheck };
 export const authenticate = (identifier: string, password: string): Promise<AuthResult> => signInAction(identifier, password);
+
+/** Forgot password: email (or code) + registered phone + new password. Resolves to an error message, or null once the password is changed. */
+export const resetPassword = async (identifier: string, phone: string, newPassword: string): Promise<string | null> => {
+  const res = await resetEmployeePassword({ identifier, phone, newPassword }).catch(() => null);
+  return res ? (res.ok ? null : res.error) : "Could not reach the server. Please try again.";
+};
 
 /** Step 1 of account activation: only an email an Admin already added to the directory may continue. */
 export const checkInvite = (email: string, phone: string): Promise<ActivationCheck> => checkInviteAction(email, phone);

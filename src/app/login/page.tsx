@@ -11,11 +11,12 @@ import { useBranchTools } from "@/store/branch-store";
 import { Popover } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/primitives";
 import { ActivationFlow } from "@/components/auth/activation";
+import { ForgotPassword } from "@/components/auth/forgot-password";
 import { PasscodeStep } from "@/components/auth/passcode";
 import { AmbientBackground } from "@/components/auth/ambient-background";
 import { AuthField, BrandLogo, PasswordField, SubmitButton, linkCls, stepMotion, type AuthStage } from "@/components/auth/auth-ui";
 import { useSettings } from "@/store/settings-store";
-import { forgotPassword, loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
+import { loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
 import { ACCESS_DENIED, authenticate, useEmployees, type Employee } from "@/store/employee-store";
 
 const utilityBtn = "grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white/80 text-slate-600 shadow-sm outline-none backdrop-blur transition-colors hover:text-[#0020B2] focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:shadow-none dark:hover:text-white dark:focus-visible:ring-sky-400/60";
@@ -168,8 +169,12 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
-  /** True while the card shows its back: Activate your account. */
+  /** The card's views: "signin" is the front; "activate" and "forgot" share the back. */
   const [isFlipped, setIsFlipped] = useState(false);
+  const [backView, setBackView] = useState<"activate" | "forgot">("activate");
+  /** Bumped each time the back is opened, so it always starts as a fresh form. */
+  const [backKey, setBackKey] = useState(0);
+  const view: "signin" | "activate" | "forgot" = isFlipped ? backView : "signin";
   const front = useRef<HTMLDivElement>(null);
   const back = useRef<HTMLDivElement>(null);
   const [checking, setChecking] = useState(false);
@@ -255,11 +260,15 @@ export default function LoginPage() {
     enter(who);
   };
 
-  const flipTo = (flipped: boolean) => {
+  const flipTo = (next: "signin" | "activate" | "forgot") => {
     if (stage !== "idle") return;
     setErrors({});
     setNotice(null);
-    setIsFlipped(flipped);
+    if (next !== "signin") {
+      setBackView(next);
+      setBackKey((k) => k + 1);
+    }
+    setIsFlipped(next !== "signin");
   };
 
   // Once the card has turned, put the cursor in the first field of the side now facing the user.
@@ -294,7 +303,7 @@ export default function LoginPage() {
           <div aria-hidden className="absolute inset-0 rounded-3xl border border-[#0020B2]/15 bg-white shadow-[0_24px_60px_-24px_rgba(0,32,178,0.28),0_2px_6px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-gradient-to-b dark:from-white/[0.08] dark:to-white/[0.025] dark:shadow-[0_40px_90px_-30px_rgba(0,32,178,0.7),inset_0_1px_0_rgba(255,255,255,0.08)] dark:backdrop-blur-2xl" />
           <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#0050FF] to-transparent" />
           <div className="relative">
-            <div className="[perspective:1000px]">
+            <div data-view={view} className="[perspective:1000px]">
               <div className={`grid [transform-style:preserve-3d] transition-transform duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${isFlipped ? "[transform:rotateY(180deg)]" : ""}`}>
                 <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="p-7 [backface-visibility:hidden] [grid-area:1/1] sm:p-9">
                   <AnimatePresence mode="wait" initial={false}>
@@ -347,7 +356,7 @@ export default function LoginPage() {
                       <Checkbox checked={remember} onChange={setRemember} label="Remember me" />
                       Remember me
                     </label>
-                    <button type="button" onClick={() => forgotPassword(email)} className={`${linkCls} -my-2`}>
+                    <button type="button" onClick={() => flipTo("forgot")} className={`${linkCls} -my-2`}>
                       Forgot password?
                     </button>
                   </div>
@@ -356,7 +365,7 @@ export default function LoginPage() {
 
                   <p className="mt-6 text-center text-[13px] text-slate-500 dark:text-slate-400">
                     New employee?{" "}
-                    <button type="button" onClick={() => flipTo(true)} disabled={stage !== "idle"} className="rounded font-semibold text-[#0020B2] underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 disabled:opacity-50 dark:text-sky-300">
+                    <button type="button" onClick={() => flipTo("activate")} disabled={stage !== "idle"} className="rounded font-semibold text-[#0020B2] underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 disabled:opacity-50 dark:text-sky-300">
                       Activate your account
                     </button>
                   </p>
@@ -366,7 +375,11 @@ export default function LoginPage() {
                   </AnimatePresence>
                 </div>
                 <div ref={back} inert={!isFlipped} aria-hidden={!isFlipped} className="p-7 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)] sm:p-9">
-                  <ActivationFlow stage={stage} active={isFlipped} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => flipTo(false)} onActivated={enter} />
+                  {backView === "forgot" ? (
+                      <ForgotPassword key={backKey} stage={stage} active={isFlipped} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => flipTo("signin")} onDone={() => flipTo("signin")} />
+                    ) : (
+                      <ActivationFlow key={backKey} stage={stage} active={isFlipped} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => flipTo("signin")} onActivated={enter} />
+                    )}
                 </div>
               </div>
             </div>

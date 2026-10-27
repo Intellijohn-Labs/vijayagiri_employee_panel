@@ -135,6 +135,29 @@ export async function activateAccountAction(email: string, phone: string, passwo
   return { ...check.employee, activated: true };
 }
 
+/**
+ * "Forgot password": the work email (or employee code) AND the registered phone number must both match an Active directory
+ * record. Every other outcome (no such record, wrong phone, inactive account, the root admin) gets the same answer, so it
+ * can't be used to find out who is in the directory. The root admin's credentials can't be changed this way at all.
+ * The new password is stored with the same scrypt hasher sign-in checks against; the employee then signs in as usual.
+ */
+export async function resetEmployeePassword(input: { identifier: string; phone: string; newPassword: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const NOT_FOUND = "Details not found in Vijayagiri Employee Directory. Contact Admin.";
+  const id = input.identifier?.trim() ?? "";
+  const key = `reset:${norm(id)}`;
+  if (locked(key)) return { ok: false, error: "Too many failed attempts. Please wait 15 minutes and try again." };
+  if (!id || (input.newPassword ?? "").length < 8) return { ok: false, error: "Enter your details and a new password of at least 8 characters." };
+  const row = await prisma.employee.findFirst({ where: { OR: [{ email: { equals: id, mode: "insensitive" } }, { code: { equals: id, mode: "insensitive" } }] } });
+  if (!row || !row.isActive || isRootEmail(row.email) || phoneKey(input.phone ?? "").length !== 10 || phoneKey(row.phone) !== phoneKey(input.phone)) {
+    failed(key);
+    return { ok: false, error: NOT_FOUND };
+  }
+  await prisma.employee.update({ where: { id: row.id }, data: { password: await hashPassword(input.newPassword) } });
+  failures.delete(key);
+  await logAudit({ action: "PASSWORD_RESET", entity: "Employee", entityId: row.id, actor: { email: row.email, name: row.name } });
+  return { ok: true };
+}
+
 /* ───────── Directory (Admin) ───────── */
 
 /** Admins get everyone; anyone else only their own record. */

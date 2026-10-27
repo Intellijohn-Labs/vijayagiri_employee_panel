@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "@/store/toast-store";
 
 
 /* ───────── Remember me ───────── */
@@ -20,10 +19,6 @@ export function saveRemembered(email: string | null) {
   } catch {
     /* storage unavailable — nothing to remember */
   }
-}
-
-export function forgotPassword(email: string) {
-  toast.info("Password reset requested", `${email.trim() ? `If ${email.trim()} has an account, a` : "A"} reset link is sent by Central Admin (Head Office, 9961774455).`);
 }
 
 /* ───────── Watermark mask ───────── */
