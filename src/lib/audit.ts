@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sessionEmployee } from "@/lib/session";
@@ -14,12 +13,7 @@ export interface AuditEntry {
   actor?: { email: string | null; name: string };
 }
 
-const clientIp = async () => {
-  const h = await headers();
-  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null;
-};
-
-/** Records an action with the signed-in actor, time and IP. Never throws: a failed log must not undo or block the action itself. */
+/** Records an action with the signed-in actor and time. No IP address is captured. Never throws: a failed log must not undo or block the action itself. */
 export async function logAudit(entry: AuditEntry) {
   try {
     const me = entry.actor ? null : await sessionEmployee();
@@ -31,7 +25,6 @@ export async function logAudit(entry: AuditEntry) {
         entity: entry.entity,
         entityId: entry.entityId,
         branchId: entry.branchId ?? undefined,
-        ipAddress: await clientIp(),
         details: (entry.details ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });

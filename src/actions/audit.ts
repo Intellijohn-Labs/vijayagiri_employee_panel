@@ -14,7 +14,6 @@ export interface AuditRow {
   entity: string;
   entityId: string | null;
   branchId: string | null;
-  ipAddress: string | null;
   details: Record<string, unknown> | null;
 }
 
@@ -27,12 +26,12 @@ export async function getAuditLogs(opts: { entity?: string; q?: string; before?:
   const where: Prisma.AuditLogWhereInput = {
     ...(opts.entity && opts.entity !== "all" ? { entity: opts.entity } : {}),
     ...(opts.before ? { createdAt: { lt: new Date(opts.before) } } : {}),
-    ...(q ? { OR: [{ actor: { contains: q, mode: "insensitive" } }, { actorName: { contains: q, mode: "insensitive" } }, { action: { contains: q, mode: "insensitive" } }, { branchId: { contains: q, mode: "insensitive" } }, { ipAddress: { contains: q } }] } : {}),
+    ...(q ? { OR: [{ actor: { contains: q, mode: "insensitive" } }, { actorName: { contains: q, mode: "insensitive" } }, { action: { contains: q, mode: "insensitive" } }, { branchId: { contains: q, mode: "insensitive" } }] } : {}),
   };
   const rows = await prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, take: PAGE + 1 });
   return {
     ok: true,
     more: rows.length > PAGE,
-    rows: rows.slice(0, PAGE).map((r) => ({ id: r.id, at: r.createdAt.getTime(), actor: r.actor, actorName: r.actorName, action: r.action, entity: r.entity, entityId: r.entityId, branchId: r.branchId, ipAddress: r.ipAddress, details: (r.details as Record<string, unknown> | null) ?? null })),
+    rows: rows.slice(0, PAGE).map((r) => ({ id: r.id, at: r.createdAt.getTime(), actor: r.actor, actorName: r.actorName, action: r.action, entity: r.entity, entityId: r.entityId, branchId: r.branchId, details: (r.details as Record<string, unknown> | null) ?? null })),
   };
 }
