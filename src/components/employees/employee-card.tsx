@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Mail, Pencil, Phone, Power } from "lucide-react";
+import { Mail, Pencil, Phone, Power, Trash2 } from "lucide-react";
 import { useAllBranches } from "@/store/branch-store";
 import { intlDigits, type Employee } from "@/store/employee-store";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ const LOGO_MASK = "url(/images/vijayagiri-logo.png)";
 const maskStyle = { WebkitMaskImage: LOGO_MASK, maskImage: LOGO_MASK, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "left center", maskPosition: "left center" } as const;
 
 /** A vertical corporate smart-badge for one employee. */
-export function EmployeeCard({ employee: e, isYou, canManage, onEdit, onToggle }: { employee: Employee; isYou: boolean; /** Only the root admin may deactivate or reactivate staff */ canManage: boolean; onEdit: () => void; onToggle: () => void }) {
+export function EmployeeCard({ employee: e, isYou, canManage, onEdit, onToggle, onDelete }: { employee: Employee; isYou: boolean; /** Only the root admin may deactivate or reactivate staff */ canManage: boolean; onEdit: () => void; onToggle: () => void; /** Given only to the root admin, and never for the root admin's own card */ onDelete?: () => void }) {
   const branches = useAllBranches();
   const active = e.status === "Active";
   const root = isRootEmail(e.email);
@@ -117,6 +117,11 @@ export function EmployeeCard({ employee: e, isYou, canManage, onEdit, onToggle }
           <Button size="sm" variant="ghost" leading={<Power className="h-3.5 w-3.5" />} onClick={onToggle} disabled={isYou || root || !canManage} title={root ? "The root admin account is protected" : isYou ? "You can't deactivate your own account" : !canManage ? ROOT_ONLY_MESSAGE : undefined}>
             {active ? "Deactivate" : "Activate"}
           </Button>
+          {onDelete && (
+            <Button size="sm" variant="ghost" iconOnly className="ml-auto text-danger hover:!bg-danger-tint hover:!text-danger" aria-label={`Delete ${e.name}`} title="Delete employee permanently" onClick={onDelete}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </motion.article>

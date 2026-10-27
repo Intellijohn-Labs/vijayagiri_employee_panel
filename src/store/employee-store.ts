@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { BASE_BRANCHES } from "@/lib/branches";
 import { EMPLOYEE_ROLES, type Employee, type EmployeeInput, type EmployeeRole, type EmployeeStatus } from "@/lib/employees";
-import { activateAccountAction, checkInviteAction, createEmployee, getEmployees, getSession, signInAction, signOutAction, toggleEmployeeStatus, updateEmployee, type ActivationCheck, type AuthResult } from "@/actions/employees";
+import { activateAccountAction, checkInviteAction, createEmployee, getEmployees, getSession, signInAction, signOutAction, deleteEmployee, toggleEmployeeStatus, updateEmployee, type ActivationCheck, type AuthResult } from "@/actions/employees";
 
 export { EMPLOYEE_ROLES };
 export type { Employee, EmployeeInput, EmployeeRole, EmployeeStatus };
@@ -26,6 +26,8 @@ interface EmployeeState {
   add: (input: EmployeeInput) => Promise<string | null>;
   update: (id: string, input: EmployeeInput) => Promise<string | null>;
   toggle: (id: string) => Promise<string | null>;
+  /** Permanently deletes (root admin only). */
+  remove: (id: string) => Promise<string | null>;
   /** Called once the server has started a session (sign-in or activation). */
   signIn: (employee: Employee) => void;
   signOut: () => void;
@@ -82,6 +84,13 @@ export const useEmployees = create<EmployeeState>((set, get) => {
       if (!res) return unreachable;
       if (!res.ok) return res.error;
       put(res.employee);
+      return null;
+    },
+    remove: async (id) => {
+      const res = await deleteEmployee(id).catch(() => null);
+      if (!res) return unreachable;
+      if (!res.ok) return res.error;
+      set({ employees: get().employees.filter((e) => e.id !== id) });
       return null;
     },
     signIn: (employee) => {

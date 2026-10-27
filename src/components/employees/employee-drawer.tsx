@@ -247,7 +247,7 @@ function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee 
 }
 
 /** Slide-over for adding a new employee (employee = null) or editing one. Cancel discards unsaved changes. */
-export function EmployeeDrawer({ employee, presetBranch, open, onClose }: { employee: Employee | null; /** Showroom ticked by default when adding (not editing) */ presetBranch?: string; open: boolean; onClose: () => void }) {
+export function EmployeeDrawer({ employee, presetBranch, open, onClose, onDelete }: { employee: Employee | null; /** Root admin only: asks the page to confirm and delete this employee */ onDelete?: () => void; /** Showroom ticked by default when adding (not editing) */ presetBranch?: string; open: boolean; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
     <Drawer
@@ -258,6 +258,11 @@ export function EmployeeDrawer({ employee, presetBranch, open, onClose }: { empl
       description={employee ? employee.name : "New staff can sign in with the official email you register here."}
       footer={
         <div className="flex items-center justify-end gap-2">
+          {employee && onDelete && (
+            <Button type="button" variant="ghost" className="mr-auto text-danger hover:!bg-danger-tint hover:!text-danger" leading={<Trash2 className="h-3.5 w-3.5" />} onClick={onDelete} disabled={busy}>
+              Delete Employee
+            </Button>
+          )}
           <Button type="button" onClick={onClose} disabled={busy}>
             Cancel
           </Button>

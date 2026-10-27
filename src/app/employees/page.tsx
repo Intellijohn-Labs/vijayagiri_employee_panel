@@ -10,6 +10,7 @@ import { branchLabel } from "@/lib/branches";
 import { toast } from "@/store/toast-store";
 import { stagger } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/overlay";
 import { Select } from "@/components/ui/popover";
 import { Card, Input, PageHeader } from "@/components/ui/primitives";
 import { PillTabs } from "@/components/ui/pill-tabs";
@@ -31,6 +32,13 @@ export default function EmployeesPage() {
   const me = useSessionEmployee();
   const employees = useEmployees((s) => s.employees);
   const toggleStatus = useEmployees((s) => s.toggle);
+  const removeEmployee = useEmployees((s) => s.remove);
+  const isRoot = isRootEmail(me?.email);
+  /** Employee awaiting the "delete permanently?" answer */
+  const [deleting, setDeleting] = useState<Employee | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  /** Only the root admin sees Delete, never on its own card or its own account. */
+  const canDelete = (e: Employee) => isRoot && !isRootEmail(e.email) && e.id !== me?.id;
 
   const [q, setQ] = useState("");
   const [role, setRole] = useState<RoleFilter>("all");
@@ -66,6 +74,16 @@ export default function EmployeesPage() {
     if (error) return void toast.error("Couldn't update the employee", error);
     const next = e.status === "Active" ? "Inactive" : "Active";
     toast.success(`${e.name} ${next === "Active" ? "activated" : "deactivated"}`, next === "Active" ? "They can sign in again." : "They can no longer sign in.");
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    const error = await removeEmployee(deleting.id);
+    setDeleteBusy(false);
+    if (error) return void toast.error("Couldn't delete the employee", error);
+    toast.success(`${deleting.name} deleted`, "Their account has been permanently removed.");
+    setDeleting(null);
   };
 
   if (me && me.role !== "Admin") {
@@ -161,13 +179,41 @@ export default function EmployeesPage() {
                   setOpen(true);
                 }}
                 onToggle={() => void toggle(e)}
+                onDelete={canDelete(e) ? () => setDeleting(e) : undefined}
               />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
 
-      <EmployeeDrawer employee={editing} presetBranch={preset} open={open} onClose={() => setOpen(false)} />
+      <EmployeeDrawer
+        employee={editing}
+        presetBranch={preset}
+        open={open}
+        onClose={() => setOpen(false)}
+        onDelete={
+          editing && canDelete(editing)
+            ? () => {
+                setOpen(false);
+                setDeleting(editing);
+              }
+            : undefined
+        }
+      />
+      <ConfirmDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => void confirmDelete()}
+        title="Delete employee?"
+        message={
+          <>
+            Are you sure you want to permanently delete <strong className="text-fg">{deleting?.name}</strong>? This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete permanently"
+        busy={deleteBusy}
+        destructive
+      />
     </>
   );
 }

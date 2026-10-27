@@ -107,6 +107,35 @@ export function Drawer({ open, onClose, title, description, children, footer, wi
   );
 }
 
+/** Centred yes/no dialog for actions that can't be undone. `destructive` makes the confirm button red. */
+export function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel = "Confirm", busy, destructive }: { open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: ReactNode; confirmLabel?: string; busy?: boolean; destructive?: boolean }) {
+  const panel = useRef<HTMLDivElement>(null);
+  useOverlayBehaviour(open, onClose, panel);
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" onClick={busy ? undefined : onClose} />
+          <motion.div ref={panel} role="alertdialog" aria-modal="true" aria-label={title} initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 380, damping: 30 } }} exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.12 } }} className="relative z-10 w-full max-w-sm rounded-2xl border border-line bg-overlay p-5 shadow-pop">
+            <h2 className="text-[15px] font-semibold tracking-tight text-fg">{title}</h2>
+            <div className="mt-1.5 text-[13px] leading-5 text-muted">{message}</div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" data-autofocus onClick={onClose} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" loading={busy} onClick={onConfirm} className={destructive ? "!bg-red-600 text-white hover:!bg-red-700" : undefined}>
+                {confirmLabel}
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 /** A light image preview: the photo on a dimmed backdrop. Click outside, press Esc or use the button to close. */
 export function Lightbox({ open, onClose, src, title }: { open: boolean; onClose: () => void; src: string; title: string }) {
   const panel = useRef<HTMLDivElement>(null);

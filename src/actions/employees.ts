@@ -226,3 +226,20 @@ export async function toggleEmployeeStatus(id: string): Promise<EmployeeResult> 
     return { ok: false, error: conflict(e) };
   }
 }
+
+/** Permanently removes an employee. Only the root admin may do this, and never to the root admin itself. */
+export async function deleteEmployee(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const me = await sessionEmployee();
+  if (!isRootEmail(me?.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
+  const target = await prisma.employee.findUnique({ where: { id }, select: { id: true, email: true } });
+  if (!target) return { ok: false, error: "Employee not found" };
+  if (isRootEmail(target.email) || target.id === me?.id) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
+  try {
+    // Nothing else in the database points at an employee (claims keep the name as text), so a plain delete is enough.
+    await prisma.employee.delete({ where: { id } });
+    revalidatePath("/employees");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: conflict(e) };
+  }
+}
