@@ -1,6 +1,5 @@
 import type { PrismaClient } from "../generated/prisma/client";
 import { seedRows } from "./branch-api";
-import { randomBytes } from "node:crypto";
 import { hashPassword } from "./password";
 import { ROOT_ADMIN_EMAIL } from "./employees";
 
@@ -20,15 +19,18 @@ export async function seedBranches(db: PrismaClient) {
 }
 
 /**
- * Creates the Root Super Admin if it's missing. Its password is ROOT_ADMIN_PASSWORD from the server's environment; without
- * one, a random password is generated and printed once (in the deploy log), never the shared demo password.
+ * Creates the Root Super Admin, or re-applies its password if it already exists. The password is ROOT_ADMIN_PASSWORD from the
+ * server's environment, else the same default as the other seeded accounts. Hashing goes through `hashPassword`, the same
+ * function sign-in checks with, so what is stored here is exactly what `verifyPassword` expects.
+ * (Nothing in the portal can change this password yet, so re-applying it on every seed can't undo anyone's change.)
  */
 export async function seedRootAdmin(db: PrismaClient) {
-  if (await db.employee.findUnique({ where: { email: ROOT_ADMIN_EMAIL }, select: { id: true } })) return;
-  const chosen = process.env.ROOT_ADMIN_PASSWORD;
-  const password = chosen || randomBytes(12).toString("base64url");
-  await db.employee.create({ data: { code: "VAA-EMP-000", name: "Root Admin", email: ROOT_ADMIN_EMAIL, phone: "+91 99617 74455", whatsapp: "+91 99617 74455", role: "Admin", allBranches: true, branchCodes: [], password: await hashPassword(password) } });
-  console.log(chosen ? `Root admin ${ROOT_ADMIN_EMAIL} created with the password from ROOT_ADMIN_PASSWORD.` : `Root admin ${ROOT_ADMIN_EMAIL} created. One-time password: ${password}  (change it after signing in)`);
+  const password = await hashPassword(process.env.ROOT_ADMIN_PASSWORD || DEFAULT_PASSWORD);
+  await db.employee.upsert({
+    where: { email: ROOT_ADMIN_EMAIL },
+    update: { password, isActive: true, role: "Admin", allBranches: true, branchCodes: [] },
+    create: { code: "VAA-EMP-000", name: "Root Admin", email: ROOT_ADMIN_EMAIL, phone: "+91 99617 74455", whatsapp: "+91 99617 74455", role: "Admin", allBranches: true, branchCodes: [], password },
+  });
 }
 
 /** Adds any missing default accounts; existing rows (and their edits) are left alone. */
