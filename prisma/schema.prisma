@@ -1,0 +1,78 @@
+// Prisma schema for the Vijayagiri Employee Portal (claims + 10-stage lifecycle).
+// The database URL lives in prisma.config.ts (Prisma 7), read from DATABASE_URL.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Claim {
+  id                 String   @id @default(cuid())
+  jobCardNumber      String   @unique
+  customerName       String
+  contactNumber      String
+  vehicleModel       String
+  registrationNumber String
+  insuranceCompany   String
+  /// Current lifecycle stage, 1–10
+  currentStage       Int      @default(1)
+  status             String   @default("Open")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  jobCard JobCard?
+  history StageHistory[]
+
+  @@index([registrationNumber])
+  @@index([currentStage])
+}
+
+/// Job Card Ver 2.1 form fields
+model JobCard {
+  id             String    @id @default(cuid())
+  claimId        String    @unique
+  claim          Claim     @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  date           DateTime  @default(now())
+  advisor        String    @default("")
+  notes          String    @default("")
+  bay            String    @default("")
+  couponNo       String    @default("")
+  amc            Boolean   @default(false)
+  pp             Boolean   @default(false)
+  jobType        String    @default("Accidental")
+  telReminder    Boolean   @default(false)
+  receivedAt     DateTime?
+  promisedAt     DateTime?
+  engineNo       String    @default("")
+  engineCc       String    @default("")
+  saleDate       DateTime?
+  fuel           String    @default("1/2")
+  toolkit        Boolean   @default(false)
+  firstAid       Boolean   @default(false)
+  serviceManual  Boolean   @default(false)
+  returnOldParts Boolean   @default(false)
+  supervisor     String    @default("")
+  mechanic       String    @default("")
+  estParts       Decimal?  @db.Decimal(12, 2)
+  estLabour      Decimal?  @db.Decimal(12, 2)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model StageHistory {
+  id          String    @id @default(cuid())
+  claimId     String
+  claim       Claim     @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  stageNumber Int
+  stageName   String
+  enteredAt   DateTime  @default(now())
+  completedAt DateTime?
+  remarks     String?
+  updatedBy   String
+
+  @@index([claimId, stageNumber])
+}

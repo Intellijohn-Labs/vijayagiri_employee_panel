@@ -7,14 +7,19 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint ."
+    "lint": "biome lint .",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "clsx": "^2.1.1",
+    "dotenv": "^18.0.9",
     "framer-motion": "^14.2.0",
     "geist": "^1.7.2",
     "lucide-react": "^1.57.0",
     "next": "^16.4.1",
+    "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwind-merge": "^3.7.0",
@@ -23,10 +28,12 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
     "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.6.1",
     "postcss": "^8.5.30",
+    "prisma": "^7.10.1",
     "tailwindcss": "^3.4.19",
     "typescript": "^7.0.2"
   }
