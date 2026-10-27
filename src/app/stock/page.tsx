@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Boxes, Building2, CheckCircle2, ChevronLeft, ChevronRight, Filter, Layers, PackagePlus, Search, SearchX, Sparkles, Store, Trash2, Trophy, Truck } from "lucide-react";
+import { Boxes, Building2, CheckCircle2, ChevronLeft, ChevronRight, Filter, Layers, PackagePlus, Search, SearchX, Store, Trophy, Truck } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useColourHex, useStock, useVisibleEntries, type StockEntry } from "@/store/stock-store";
 import { branchPick, branchTitle } from "@/lib/branches";
@@ -113,8 +113,6 @@ export default function AllStockPage() {
   const hydrated = useStock((s) => s.hydrated);
   // Only the showrooms this employee may see feed every number and table on the page.
   const entries = useVisibleEntries();
-  const loadSample = useStock((s) => s.loadSample);
-  const clearSample = useStock((s) => s.clearSample);
   const tableRef = useRef<HTMLDivElement>(null);
 
   const [view, setView] = useState<View>("table");
@@ -126,7 +124,6 @@ export default function AllStockPage() {
   const [page, setPage] = useState(0);
   const router = useRouter();
 
-  const hasSample = entries.some((e) => e.sample);
 
   /* ───── network-wide numbers ───── */
   const totals = useMemo(() => {
@@ -203,16 +200,13 @@ export default function AllStockPage() {
             <Boxes className="h-5 w-5" />
           </span>
           <h2 className="text-[15px] font-semibold text-fg">No stock recorded yet</h2>
-          <p className="mt-1 max-w-md text-[13px] text-muted">Stock you take in through Add Stock shows up here, with live counts for every showroom. You can also load a set of sample vehicles to explore the page.</p>
+          <p className="mt-1 max-w-md text-[13px] text-muted">Stock you take in through Add Stock shows up here, with live counts for every showroom.</p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Link href="/stock/add">
               <Button variant="primary" leading={<PackagePlus className="h-3.5 w-3.5" />}>
                 Add stock
               </Button>
             </Link>
-            <Button leading={<Sparkles className="h-3.5 w-3.5" />} onClick={loadSample}>
-              Load sample stock
-            </Button>
           </div>
         </Card>
       </>
@@ -222,16 +216,6 @@ export default function AllStockPage() {
   return (
     <>
       {header}
-
-      {hasSample && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-accent/25 bg-tint px-4 py-2.5 text-[13px] text-accent-text">
-          <Sparkles className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Sample vehicles are loaded so you can explore this page. They are demo data, not real stock.</span>
-          <Button size="sm" leading={<Trash2 className="h-3.5 w-3.5" />} onClick={clearSample}>
-            Remove sample data
-          </Button>
-        </div>
-      )}
 
       {/* network overview */}
       <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

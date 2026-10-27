@@ -10,23 +10,41 @@ datasource db {
   provider = "postgresql"
 }
 
+/// One accident-repair claim moving through the 10-stage SOP:
+/// 1 Customer Intake & Claim Initiation · 2 Job Card & Claim Number Allocation · 3 Estimation & Insurance Intimation ·
+/// 4 Surveyor Showroom Inspection · 5 Spare Parts Ordering · 6 Central Dispatch / Transit · 7 Vehicle Body Repair & Paint ·
+/// 8 Final Inspection & Billing · 9 Settlement & Gate Pass · 10 Vehicle Delivery & Closure
 model Claim {
-  id                 String   @id @default(cuid())
-  jobCardNumber      String   @unique
+  id                 String    @id
+  /// Internal reference generated at intake, e.g. CLM-PBR-0012
+  ref                String    @unique
+  /// Official claim number, assigned at stage 2
+  claimNo            String?
+  jobCardNumber      String?   @unique
+  /// Branch code (Branch.code)
+  branchId           String
   customerName       String
   contactNumber      String
   vehicleModel       String
   registrationNumber String
   insuranceCompany   String
   /// Current lifecycle stage, 1–10
-  currentStage       Int      @default(1)
-  status             String   @default("Open")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  currentStage       Int       @default(1)
+  /// "Open" until the vehicle is handed over, then "Delivered"
+  status             String    @default("Open")
+  /// When the current stage began; every stage SLA counts from here
+  stageEnteredAt     DateTime  @default(now())
+  closedAt           DateTime?
+  createdBy          String    @default("")
+  /// The full claim as the portal edits it (estimate, survey, parts, billing, handover, activity log, escalations, …)
+  data               Json
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   jobCard JobCard?
   history StageHistory[]
 
+  @@index([branchId])
   @@index([registrationNumber])
   @@index([currentStage])
 }
@@ -63,6 +81,7 @@ model JobCard {
   updatedAt      DateTime  @updatedAt
 }
 
+/// One row per stage a claim has entered: when it started, when it was completed, its SLA deadline and whether that was missed.
 model StageHistory {
   id          String    @id @default(cuid())
   claimId     String
@@ -71,10 +90,14 @@ model StageHistory {
   stageName   String
   enteredAt   DateTime  @default(now())
   completedAt DateTime?
+  /// SLA deadline that applied to this stage, when it had one
+  dueAt       DateTime?
+  breached    Boolean   @default(false)
   remarks     String?
+  /// Who last moved or updated the claim in this stage
   updatedBy   String
 
-  @@index([claimId, stageNumber])
+  @@unique([claimId, stageNumber])
 }
 
 model Branch {

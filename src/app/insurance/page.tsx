@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Search, SearchX, ShieldCheck } from "lucide-react";
 import { useBranchTools } from "@/store/branch-store";
-import { useInsurance, useVisiblePolicies } from "@/store/insurance-store";
+import { useVisiblePolicies } from "@/store/insurance-store";
 import { policyStatus, type Policy } from "@/lib/insurance";
 import { branchLabel } from "@/lib/branches";
 import { stagger } from "@/lib/motion";
@@ -29,8 +29,6 @@ const inView = (p: Policy, v: View) => {
 export default function InsurancePage() {
   const policies = useVisiblePolicies();
   const { branches } = useBranchTools();
-  const loadSample = useInsurance((s) => s.loadSample);
-  const clearSample = useInsurance((s) => s.clearSample);
 
   const [view, setView] = useState<View>("all");
   const [showroom, setShowroom] = useState("all");
@@ -59,7 +57,6 @@ export default function InsurancePage() {
         return da - dz || z.createdAt - a.createdAt;
       });
   }, [inShowroom, view, q]);
-  const hasSample = policies.some((p) => p.sample);
 
   const openAdd = () => {
     setEditing(null);
@@ -73,11 +70,6 @@ export default function InsurancePage() {
         description="Every customer's two-wheeler insurance in one place: policies, validity, documents and renewal reminders."
         actions={
           <div className="flex items-center gap-2">
-            {hasSample && (
-              <Button variant="ghost" onClick={clearSample}>
-                Clear sample data
-              </Button>
-            )}
             <Button variant="primary" className="bg-[#003399] text-white hover:bg-[#0047AB]" leading={<Plus className="h-3.5 w-3.5" />} onClick={openAdd}>
               Add Policy
             </Button>
@@ -101,13 +93,12 @@ export default function InsurancePage() {
         <Card className="flex flex-col items-center px-6 py-14 text-center">
           <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl border border-line bg-hover text-muted">{policies.length ? <SearchX className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}</span>
           <p className="text-sm font-medium text-fg">{policies.length ? "No policies match" : "No insurance records yet"}</p>
-          <p className="mt-1 max-w-sm text-[13px] text-muted">{policies.length ? "Try another filter, showroom or search." : "Add a policy for a booked or delivered vehicle, or load a few sample records to see how the hub works."}</p>
+          <p className="mt-1 max-w-sm text-[13px] text-muted">{policies.length ? "Try another filter, showroom or search." : "Add a policy for a booked or delivered vehicle."}</p>
           {!policies.length && (
             <div className="mt-4 flex gap-2">
               <Button variant="primary" className="bg-[#003399] text-white hover:bg-[#0047AB]" leading={<Plus className="h-3.5 w-3.5" />} onClick={openAdd}>
                 Add Policy
               </Button>
-              <Button onClick={loadSample}>Load sample policies</Button>
             </div>
           )}
         </Card>

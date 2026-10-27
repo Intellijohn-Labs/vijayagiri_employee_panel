@@ -2,13 +2,15 @@
 
 import { useMemo } from "react";
 import { create } from "zustand";
-import { deleteClaimFile, saveClaimFile } from "@/lib/photo-db";
-import { HOUR, SLA, blankClaim, buildSampleClaims, isEscalated, logEntry, missingFor, nextGatepassNo, nextRef, slaFor, stageDef, type Claim, type ClaimEvent, type ClaimFile, type Intake, type StageNo } from "@/lib/claims";
+import { saveClaimFile } from "@/lib/photo-db";
+import { createClaim, listClaims, saveClaim } from "@/actions/claims";
+import { HOUR, SLA, blankClaim, isEscalated, logEntry, missingFor, nextGatepassNo, nextRef, slaFor, stageDef, type Claim, type ClaimEvent, type ClaimFile, type Intake, type StageNo } from "@/lib/claims";
 import { fmtHours, stageSla } from "@/lib/sla-config";
 import { canAccess, useAccessibleIds, useEmployees, type Employee } from "./employee-store";
 import { toast } from "./toast-store";
 
-const KEY = "vg.claims";
+/** Claims used to live in this browser (with demo records); the key is only here to clear what an earlier version left behind. */
+const LEGACY_KEY = "vg.claims";
 
 export type FileSlot = "survey" | "ramp";
 export const fileId = (claimId: string, slot: FileSlot) => `${claimId}:${slot}`;
@@ -17,8 +19,12 @@ export type CompleteResult = { ok: true } | { ok: false; missing: string[] };
 
 interface ClaimsState {
   hydrated: boolean;
+  /** Set when the last read from the database failed, so the screen says so instead of looking empty. */
+  loadError: boolean;
   claims: Claim[];
   hydrate: () => void;
+  /** Re-reads every claim from PostgreSQL. */
+  load: () => Promise<void>;
   create: (intake: Intake) => Claim;
   /** Shallow-merge fields into a claim (sections are replaced whole). */
   set: (id: string, patch: Partial<Claim>) => void;
@@ -38,17 +44,7 @@ interface ClaimsState {
   issueGatepass: (id: string, collectedBy: string) => boolean;
   /** Raise an alert, once, for every timer that has run out. Returns the claims that just breached. */
   sweep: () => { claim: Claim; topManagement: boolean; label: string }[];
-  resetSample: () => void;
-  clearAll: () => void;
 }
-
-const write = (claims: Claim[]) => {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(claims));
-  } catch {
-    /* storage unavailable — kept for this session only */
-  }
-};
 
 const me = (): Employee | null => {
   const { employees, sessionId } = useEmployees.getState();
@@ -62,36 +58,70 @@ export const isBranchManagerOf = (e: Employee | null, branchId: string) => !!e &
 const ev = (text: string, tone: ClaimEvent["tone"] = "info", at = Date.now()): ClaimEvent => ({ at, text, tone });
 
 export const useClaims = create<ClaimsState>((set, get) => {
+  /** Saves for one claim run one after another, and after its creation, so the database sees them in the order they were made. */
+  const tails = new Map<string, Promise<unknown>>();
+  const queue = (id: string, job: () => Promise<unknown>) => {
+    const next = (tails.get(id) ?? Promise.resolve()).then(job, job);
+    tails.set(id, next);
+    return next;
+  };
+  const failed = (error: string) => {
+    toast.error("Couldn't save to the database", error);
+    void get().load();
+  };
+  const persist = (c: Claim) =>
+    queue(c.id, async () => {
+      const res = await saveClaim(c, myName(), slaFor(c, Date.now())?.dueAt).catch(() => ({ ok: false as const, error: "Could not reach the database. Please try again." }));
+      if (!res.ok) failed(res.error);
+    });
+
   const commit = (claims: Claim[]) => {
+    const before = get().claims;
     set({ claims });
-    write(claims);
+    // Only claims that already exist are saved here; a new one is saved by `create`.
+    for (const c of claims) {
+      const old = before.find((x) => x.id === c.id);
+      if (old && old !== c) void persist(c);
+    }
   };
   const edit = (id: string, fn: (c: Claim) => Claim) => commit(get().claims.map((c) => (c.id === id ? fn(c) : c)));
   const find = (id: string) => get().claims.find((c) => c.id === id);
 
   return {
     hydrated: false,
+    loadError: false,
     claims: [],
     hydrate: () => {
-      let claims: Claim[] | null = null;
       try {
-        const raw = localStorage.getItem(KEY);
-        if (raw) claims = JSON.parse(raw) as Claim[];
+        localStorage.removeItem(LEGACY_KEY);
       } catch {
-        /* unreadable — fall back to the demo set */
+        /* storage unavailable */
       }
-      // First visit: seed demo claims at every stage so each one can be tested straight away.
-      if (!claims) {
-        claims = buildSampleClaims(Date.now());
-        write(claims);
+      void get().load();
+      // Pick up claims other people created or moved while this tab was in the background.
+      window.addEventListener("focus", () => void get().load());
+    },
+    load: async () => {
+      try {
+        set({ claims: await listClaims(), hydrated: true, loadError: false });
+      } catch {
+        set({ hydrated: true, loadError: true });
       }
-      set({ claims, hydrated: true });
     },
     create: (intake) => {
       const now = Date.now();
       const claims = get().claims;
       const claim = blankClaim(intake, `clm-${now.toString(36)}`, nextRef(claims, intake.branchId), myName(), now);
-      commit([claim, ...claims]);
+      set({ claims: [claim, ...claims] });
+      void queue(claim.id, async () => {
+        const res = await createClaim(claim, myName(), slaFor(claim, now)?.dueAt).catch(() => ({ ok: false as const, error: "Could not reach the database. Please try again." }));
+        if (!res.ok) {
+          set({ claims: get().claims.filter((c) => c.id !== claim.id) });
+          return toast.error("Couldn't create the claim", res.error);
+        }
+        // The database allocated the final reference; keep the local copy in step.
+        set({ claims: get().claims.map((c) => (c.id === claim.id ? { ...c, ref: res.claim.ref, events: res.claim.events } : c)) });
+      });
       return claim;
     },
     set: (id, patch) => edit(id, (c) => ({ ...c, ...patch })),
@@ -227,14 +257,6 @@ export const useClaims = create<ClaimsState>((set, get) => {
       return fresh;
     },
 
-    resetSample: () => {
-      for (const c of get().claims) {
-        if (!c.sample) continue;
-        for (const slot of ["survey", "ramp"] as const) void deleteClaimFile(fileId(c.id, slot)).catch(() => undefined);
-      }
-      commit([...buildSampleClaims(Date.now()), ...get().claims.filter((c) => !c.sample)]);
-    },
-    clearAll: () => commit([]),
   };
 });
 

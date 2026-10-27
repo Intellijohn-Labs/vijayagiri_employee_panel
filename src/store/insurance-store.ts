@@ -3,13 +3,13 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { deletePolicyDoc, loadPolicyDoc, savePolicyDoc } from "@/lib/photo-db";
-import { isoDate, suggestEnd, type Policy } from "@/lib/insurance";
+import { type Policy } from "@/lib/insurance";
 import { useAccessibleIds } from "./employee-store";
 import { toast } from "./toast-store";
 
 const KEY = "vg.insurance";
 
-type NewPolicy = Omit<Policy, "id" | "createdAt" | "docName" | "docSize" | "renewalPending" | "sample"> & Partial<Pick<Policy, "renewalPending">>;
+type NewPolicy = Omit<Policy, "id" | "createdAt" | "docName" | "docSize" | "renewalPending"> & Partial<Pick<Policy, "renewalPending">>;
 
 interface InsuranceState {
   hydrated: boolean;
@@ -23,8 +23,6 @@ interface InsuranceState {
   restore: (p: Policy) => void;
   /** Mark that a renewal reminder went out. */
   markReminded: (id: string) => void;
-  loadSample: () => void;
-  clearSample: () => void;
 }
 
 const write = (policies: Policy[]) => {
@@ -76,11 +74,6 @@ export const useInsurance = create<InsuranceState>((set, get) => {
     },
     restore: (p) => commit([p, ...get().policies].sort((a, z) => z.createdAt - a.createdAt)),
     markReminded: (id) => commit(get().policies.map((x) => (x.id === id ? { ...x, renewalPending: true } : x))),
-    loadSample: () => {
-      if (get().policies.some((p) => p.sample)) return;
-      commit([...get().policies, ...buildSamplePolicies(Date.now())]);
-    },
-    clearSample: () => commit(get().policies.filter((p) => !p.sample)),
   };
 });
 
@@ -98,32 +91,4 @@ export function useVisiblePolicies(): Policy[] {
   const policies = useInsurance((s) => s.policies);
   const ids = useAccessibleIds();
   return useMemo(() => (ids ? policies.filter((p) => ids.includes(p.branchId)) : policies), [policies, ids]);
-}
-
-/** Demo records spanning every status, dated relative to today. */
-function buildSamplePolicies(now: number): Policy[] {
-  const day = (n: number) => isoDate(new Date(now + n * 86_400_000));
-  const mk = (i: number, p: Partial<Policy> & Pick<Policy, "branchId" | "customer" | "phone" | "modelName" | "partner" | "type">): Policy => ({
-    id: `POL-sample-${i}`,
-    chassisNo: `ME1RG66${String(10000 + i * 7).padStart(5, "0")}N${200000 + i}`.slice(0, 17),
-    engineNo: `G3J${600000 + i * 13}`,
-    regNo: "",
-    policyNo: "",
-    start: "",
-    end: "",
-    premium: null,
-    renewalPending: false,
-    sample: true,
-    createdAt: now - i,
-    ...p,
-  });
-  const dated = (start: string, type: Policy["type"]) => ({ start, end: suggestEnd(start, type) });
-  return [
-    mk(1, { branchId: "kothamangalam", customer: "Rahul Menon", phone: "98470 11111", modelName: "MT-15 V2", partner: "HDFC ERGO", type: "Bundled 1+5", policyNo: "2W-KTM-540021", regNo: "KL-17-AB-4521", premium: 8240, ...dated(day(-40), "Bundled 1+5") }),
-    mk(2, { branchId: "perumbavoor", customer: "Anjali Nair", phone: "98470 22222", modelName: "Aerox 155", partner: "ICICI Lombard", type: "Comprehensive", policyNo: "ICL-PVR-118842", regNo: "KL-40-C-7788", premium: 5120, ...dated(day(-351), "Comprehensive") }),
-    mk(3, { branchId: "hq", customer: "Suresh Pillai", phone: "98470 33333", modelName: "YZF R15 V4 / R15M", partner: "Bajaj Allianz", type: "Zero Depreciation", policyNo: "BAJ-HQ-902211", regNo: "KL-07-DQ-1204", premium: 6890, ...dated(day(-380), "Zero Depreciation") }),
-    mk(4, { branchId: "angamaly", customer: "Fathima Rasheed", phone: "98470 44444", modelName: "RayZR 125 Fi Hybrid", partner: "Reliance General", type: "Bundled 1+5" }),
-    mk(5, { branchId: "kothamangalam", customer: "Joseph Thomas", phone: "98470 55555", modelName: "FZS-FI V4", partner: "National Insurance", type: "Comprehensive", policyNo: "NIC-KTM-330917", regNo: "KL-17-M-3321", premium: 4780, renewalPending: true, ...dated(day(-359), "Comprehensive") }),
-    mk(6, { branchId: "allapra", customer: "Deepak Varma", phone: "98470 66666", modelName: "Fascino 125 Fi Hybrid", partner: "HDFC ERGO", type: "Zero Depreciation", policyNo: "2W-ALP-771203", regNo: "KL-63-F-9090", premium: 5460, ...dated(day(-165), "Zero Depreciation") }),
-  ];
 }

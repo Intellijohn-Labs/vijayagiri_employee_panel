@@ -1,4 +1,4 @@
-/* ───────── Vehicle Claims & Workshop — domain model, SLA rules, sample data ───────── */
+/* ───────── Vehicle Claims & Workshop — domain model and SLA rules ───────── */
 
 import { fmtHours, stageSla } from "./sla-config";
 
@@ -166,7 +166,6 @@ export interface Claim {
   createdBy: string;
   /** Set when the vehicle is handed over; the claim is then "Delivered to Customer" */
   closedAt?: number;
-  sample?: boolean;
 
   customerName: string;
   phone: string;
@@ -407,7 +406,7 @@ export function normalizeRegNo(reg: string): string | null {
 
 export const YAMAHA_MODELS = ["MT-15 V2", "YZF R15 V4 / R15M", "FZS-FI V4", "FZ-X", "Aerox 155", "RayZR 125 Fi Hybrid", "Fascino 125 Fi Hybrid", "YZF R3"];
 
-/* ───────── Blank claim & sample data ───────── */
+/* ───────── Blank claim ───────── */
 
 export const defaultChecklist = (): ChecklistItem[] => {
   const mk = (group: ChecklistItem["group"], labels: string[]): ChecklistItem[] => labels.map((label, i) => ({ id: `${group[0].toLowerCase()}${i + 1}`, group, label, done: false }));
@@ -452,147 +451,4 @@ export function blankClaim(i: Intake & IntakeExtras, id: string, ref: string, by
     events: [{ at: now, text: `Claim ${ref} opened`, tone: "info" }],
     escalations: [],
   };
-}
-
-interface Seed {
-  branchId: string;
-  customerName: string;
-  model: string;
-  regNo: string;
-  insurer: string;
-  stage: StageNo;
-  /** Hours spent so far in the current stage */
-  inStageH: number;
-  /** Fills in or tweaks the stage-specific state after the earlier stages are completed */
-  tweak?: (c: Claim, now: number) => void;
-}
-
-/** Tick the first `count` checklist items (all of them by default). */
-const markDone = (c: Claim, count = Number.POSITIVE_INFINITY) => {
-  c.checklist.forEach((i, n) => {
-    i.done = n < count;
-  });
-};
-
-const SEEDS: Seed[] = [
-  { branchId: "perumbavoor", customerName: "Rahul Menon", model: "MT-15 V2", regNo: "KL-40-AB-4521", insurer: "HDFC ERGO", stage: 1, inStageH: 1 },
-  { branchId: "kothamangalam", customerName: "Anjali Nair", model: "Aerox 155", regNo: "KL-17-C-7788", insurer: "ICICI Lombard", stage: 2, inStageH: 3 },
-  { branchId: "allapra", customerName: "Suresh Pillai", model: "YZF R15 V4 / R15M", regNo: "KL-63-DQ-1204", insurer: "Bajaj Allianz", stage: 3, inStageH: 6, tweak: (c) => { c.estimate.lines = [{ id: "l1", category: "Parts", description: "Front fairing set", amount: 7800 }, { id: "l2", category: "Labour", description: "Dismantle & refit", amount: 1800 }]; } },
-  { branchId: "angamaly", customerName: "Fathima Rasheed", model: "RayZR 125 Fi Hybrid", regNo: "KL-07-BE-3320", insurer: "Reliance General", stage: 4, inStageH: 20, tweak: (c) => { c.survey = { ...c.survey, surveyor: "T. K. Varghese", phone: "98470 70707", visit: "Scheduled", visitDate: isoToday() }; } },
-  { branchId: "perumbavoor", customerName: "Joseph Thomas", model: "FZS-FI V4", regNo: "KL-40-M-3321", insurer: "National Insurance", stage: 5, inStageH: 1 },
-  { branchId: "kalady", customerName: "Deepak Varma", model: "FZ-X", regNo: "KL-63-F-9090", insurer: "HDFC ERGO", stage: 5, inStageH: 4.17 },
-  { branchId: "kothamangalam", customerName: "Sreeja Mohan", model: "Fascino 125 Fi Hybrid", regNo: "KL-17-T-5512", insurer: "New India Assurance", stage: 5, inStageH: 7.5 },
-  {
-    branchId: "angamaly",
-    customerName: "Nikhil Raj",
-    model: "YZF R3",
-    regNo: "KL-07-CK-8806",
-    insurer: "ICICI Lombard",
-    stage: 5,
-    inStageH: 30,
-    tweak: (c, now) => { c.parts = { ...c.parts, orderNo: "YMD-PO-884120", orderedAt: now - 26 * HOUR, orderedBy: "Parts Manager", etaDays: 5 }; },
-  },
-  { branchId: "allapra", customerName: "Maya Krishnan", model: "MT-15 V2", regNo: "KL-63-G-2210", insurer: "Bajaj Allianz", stage: 6, inStageH: 3, tweak: (c, now) => { c.parts = { ...c.parts, receivedAt: now - 3 * HOUR }; } },
-  { branchId: "perumbavoor", customerName: "Faisal Ahmed", model: "Aerox 155", regNo: "KL-40-N-6643", insurer: "ICICI Lombard", stage: 6, inStageH: 14, tweak: (c, now) => { c.parts = { ...c.parts, receivedAt: now - 14 * HOUR }; } },
-  { branchId: "kalady", customerName: "Lekshmi Pillai", model: "FZS-FI V4", regNo: "KL-63-H-1187", insurer: "United India Insurance", stage: 6, inStageH: 10, tweak: (c, now) => { c.parts = { ...c.parts, receivedAt: now - 10 * HOUR }; } },
-  { branchId: "kothamangalam", customerName: "Arun Kumar", model: "YZF R15 V4 / R15M", regNo: "KL-17-W-9021", insurer: "HDFC ERGO", stage: 7, inStageH: 2 },
-  { branchId: "angamaly", customerName: "Divya Suresh", model: "RayZR 125 Fi Hybrid", regNo: "KL-07-AF-4417", insurer: "Reliance General", stage: 7, inStageH: 6.9 },
-  {
-    branchId: "perumbavoor",
-    customerName: "Vishnu Prasad",
-    model: "MT-15 V2",
-    regNo: "KL-40-R-1902",
-    insurer: "HDFC ERGO",
-    stage: 8,
-    inStageH: 20,
-    tweak: (c) => markDone(c, 5),
-  },
-  { branchId: "kalady", customerName: "Reshma Babu", model: "Fascino 125 Fi Hybrid", regNo: "KL-63-K-7765", insurer: "National Insurance", stage: 8, inStageH: 50, tweak: (c) => markDone(c, 8) },
-  { branchId: "perumbavoor", customerName: "George Mathew", model: "FZ-X", regNo: "KL-40-S-3098", insurer: "ICICI Lombard", stage: 9, inStageH: 5, tweak: (c) => markDone(c) },
-  {
-    branchId: "perumbavoor",
-    customerName: "Neethu Joseph",
-    model: "Aerox 155",
-    regNo: "KL-40-P-5521",
-    insurer: "Bajaj Allianz",
-    stage: 10,
-    inStageH: 4,
-    tweak: (c) => {
-      markDone(c);
-      c.billing = { invoiceNo: "INV-26-1184", totalBill: 24600, insuranceCredited: 20300, depreciation: 3800, paymentRef: "UPI 4410 2288", balancePaid: true };
-    },
-  },
-  {
-    branchId: "kothamangalam",
-    customerName: "Basil Varghese",
-    model: "MT-15 V2",
-    regNo: "KL-17-V-2204",
-    insurer: "HDFC ERGO",
-    stage: 10,
-    inStageH: 3,
-    tweak: (c, now) => {
-      markDone(c);
-      c.billing = { invoiceNo: "INV-26-1171", totalBill: 18900, insuranceCredited: 15900, depreciation: 2600, paymentRef: "Cash", balancePaid: true };
-      c.handover = { approved: true, approvedBy: "Branch Manager - Kothamangalam", approvedAt: now - 2 * HOUR, gatepassNo: "GP-26-0007", gatepassAt: now - 1.5 * HOUR, collectedBy: c.customerName };
-      c.closedAt = now - 1.5 * HOUR;
-    },
-  },
-];
-
-/** Demo claims across the branches with every stage populated, timed relative to `now` so timers show all three colours. */
-export function buildSampleClaims(now: number): Claim[] {
-  const counts: Record<string, number> = {};
-  return SEEDS.map((s, i) => {
-    counts[s.branchId] = (counts[s.branchId] ?? 0) + 1;
-    const enteredAt = now - s.inStageH * HOUR;
-    const ref = `CLM-${branchCode(s.branchId)}-${pad(100 + counts[s.branchId])}`;
-    const c = blankClaim(
-      {
-        branchId: s.branchId,
-        customerName: s.customerName,
-        phone: `98470 ${String(40000 + i * 137).slice(0, 5)}`,
-        email: "",
-        address: "Ernakulam, Kerala",
-        regNo: s.regNo,
-        model: s.model,
-        chassisNo: `ME1RG66${String(10000 + i * 7).padStart(5, "0")}N${200000 + i}`.slice(0, 17),
-        odometer: String(2000 + i * 913),
-        insurer: s.insurer,
-        policyNo: `POL-${700000 + i * 31}`,
-        accidentDate: new Date(now - (s.stage + 2) * DAY).toISOString().slice(0, 10),
-        damage: ["Front fairing and headlight cracked, fork bent", "Rear panel and tail section damaged in a low-speed collision", "Side fairing scraped, handlebar and mirror broken", "Fuel tank dented, left footrest bent"][i % 4],
-        jobCardNo: `JC-26-${pad(470 + i)}`,
-      },
-      `clm-sample-${i + 1}`,
-      ref,
-      "Demo data",
-      enteredAt,
-    );
-    c.sample = true;
-    c.stage = s.stage;
-    c.stageEnteredAt = enteredAt;
-    c.createdAt = now - (s.stage * 6 + s.inStageH) * HOUR;
-
-    // Fill in every earlier stage, walking backwards so each one has a plausible entry in the log.
-    if (s.stage > 1) c.claimNo = `VAA/CLM/${fy(new Date(now))}/${pad(41 + i)}`;
-    if (s.stage < 2) c.jobCardNo = "";
-    // From Stage 3 on the job card is complete; a claim waiting at Stage 2 still needs it filled in.
-    c.jobCard = { ...blankJobCard(), date: c.accidentDate, advisor: "Service Advisor" };
-    if (s.stage > 2) c.jobCard = { ...c.jobCard, bay: `BAY${(i % 3) + 1}`, receivedAt: toLocalInput(now - (s.stage + 1) * DAY), promisedAt: toLocalInput(now + 5 * DAY), supervisor: "Workshop Supervisor", mechanic: "Senior Mechanic", engineNo: `E3T4E${100000 + i * 11}`, engineCc: "155", fuel: "1/4", toolkit: true, firstAid: true };
-    if (s.stage > 3) c.estimate = { ...c.estimate, lines: [{ id: "l1", category: "Parts", description: "Front fairing set", amount: 7800 }, { id: "l2", category: "Parts", description: "Fork assembly", amount: 9200 }, { id: "l3", category: "Labour", description: "Dismantle, fit & align", amount: 3400 }, { id: "l4", category: "Paint", description: "Panel paint & polish", amount: 3200 }], intimationDate: c.accidentDate, intimationRef: `INT-${900 + i}` };
-    if (s.stage > 4) c.survey = { surveyor: "T. K. Varghese", phone: "98470 70707", visit: "Visited", visitDate: c.accidentDate, notes: "Damage consistent with the reported accident. Parts replacement approved.", report: { name: "survey-report.pdf", size: 184_320, at: enteredAt - 30 * HOUR, stored: false }, approval: "Approved" };
-    if (s.stage > 5) c.parts = { orderNo: `YMD-PO-${884000 + i * 17}`, orderedAt: enteredAt - 90 * HOUR, orderedBy: "Parts Manager", etaDays: SLA.maxTransitDays, receivedAt: enteredAt };
-    if (s.stage > 6) c.transit = { dispatchRef: `KL-07-GT-${1000 + i}`, carrier: "Branch pickup van", dispatchedAt: enteredAt - 6 * HOUR, reachedAt: enteredAt };
-    if (s.stage > 7) c.work = { ramp: { name: "ramp-photo.jpg", size: 96_000, at: enteredAt - 40 * HOUR, stored: false }, startedAt: enteredAt - 40 * HOUR, notifiedAt: enteredAt - 40 * HOUR };
-
-    s.tweak?.(c, now);
-
-    for (let n = (s.stage - 1) as number, end = enteredAt; n >= 1; n--) {
-      const took = n === 5 ? 80 * HOUR : 4 * HOUR;
-      c.stageLog[n as StageNo] = { enteredAt: end - took, completedAt: end, breached: false };
-      end -= took;
-    }
-    c.events = [{ at: c.createdAt, text: `Claim ${ref} opened`, tone: "info" as const }, ...Array.from({ length: s.stage - 1 }, (_, k) => ({ at: c.stageLog[(k + 1) as StageNo]?.completedAt ?? c.createdAt, text: `Stage ${k + 1} complete — ${stageDef((k + 1) as StageNo).short}`, tone: "ok" as const }))].sort((a, z) => z.at - a.at);
-    return c;
-  });
 }

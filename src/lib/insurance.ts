@@ -64,7 +64,6 @@ export interface Policy {
   docSize?: number;
   /** Stock unit this was created from, when it was picked from stock */
   stockId?: string;
-  sample?: boolean;
   createdAt: number;
 }
 

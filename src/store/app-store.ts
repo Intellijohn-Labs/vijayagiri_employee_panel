@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { BASE_BRANCHES, branchLabel } from "@/lib/branches";
+import { branchLabel } from "@/lib/branches";
 import { getBranch } from "./branch-store";
 import { toast } from "./toast-store";
 

@@ -6,7 +6,6 @@ import { useMemo } from "react";
 import { useAccessibleIds } from "./employee-store";
 import { getBranch } from "./branch-store";
 import { loadPhotoSets, savePhotoSet, type PhotoSet } from "@/lib/photo-db";
-import { buildSampleStock } from "@/lib/sample-stock";
 import { toast } from "./toast-store";
 
 /** One physical vehicle taken into stock at a showroom. */
@@ -30,8 +29,6 @@ export interface StockEntry {
   category?: ModelCategory;
   series?: string;
   short?: string;
-  /** Demo data from "Load sample stock" — removable in one click */
-  sample?: boolean;
   createdAt: number;
 }
 
@@ -54,9 +51,7 @@ interface StockState {
   extras: ModelExtras;
   photoSets: Record<string, PhotoSet>;
   hydrate: () => void;
-  add: (units: Omit<StockEntry, "id" | "createdAt" | "photoSetId" | "sample">[], photos: Omit<PhotoSet, "id"> | null) => void;
-  loadSample: () => void;
-  clearSample: () => void;
+  add: (units: Omit<StockEntry, "id" | "createdAt" | "photoSetId">[], photos: Omit<PhotoSet, "id"> | null) => void;
   /** Remember a model, variant or colour created in the intake form so it is offered next time. */
   registerOptions: (o: { model?: ModelOption; modelId: string; variant: string; colour: string; colourHex?: string }) => void;
   setStatus: (id: string, status: StockStatus) => void;
@@ -124,19 +119,6 @@ export const useStock = create<StockState>((set, get) => ({
       set((s) => ({ photoSets: { ...s.photoSets, [photoSetId]: record } }));
       savePhotoSet(record).catch(() => toast.warning("Photos not saved for later", "Your browser blocked storage, so these photos will disappear when you close the tab."));
     }
-  },
-  loadSample: () => {
-    if (get().entries.some((e) => e.sample)) return;
-    const now = Date.now();
-    const sample = buildSampleStock(now).map((u, i): StockEntry => ({ ...u, id: `S-sample-${i}`, photoSetId: null, createdAt: now - i }));
-    const entries = [...get().entries, ...sample];
-    set({ entries });
-    persist(entries);
-  },
-  clearSample: () => {
-    const entries = get().entries.filter((e) => !e.sample);
-    set({ entries });
-    persist(entries);
   },
   registerOptions: ({ model, modelId, variant, colour, colourHex }) => {
     if (model && !get().customModels.some((m) => m.id === model.id)) {

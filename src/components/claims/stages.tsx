@@ -116,7 +116,7 @@ function FilePicker({ claim, slot, file, label, accept, image, readOnly }: { cla
         )}
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-fg">{file ? file.name : `No ${label.toLowerCase()} yet`}</p>
-          <p className="text-[12px] text-muted">{file ? `${sizeText(file.size)} · ${fmtDateTime(file.at)}${file.stored ? "" : " · demo record, file not stored"}` : image ? "JPG or PNG, up to 10 MB" : "PDF or image, up to 10 MB"}</p>
+          <p className="text-[12px] text-muted">{file ? `${sizeText(file.size)} · ${fmtDateTime(file.at)}${file.stored ? "" : " · file not stored"}` : image ? "JPG or PNG, up to 10 MB" : "PDF or image, up to 10 MB"}</p>
         </div>
         <div className="flex gap-2">
           {!image && url && (

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { SearchX, Wrench } from "lucide-react";
 import { useClaims } from "@/store/claims-store";
 import { useClaimFilters } from "@/store/claims-filter-store";
-import { toast } from "@/store/toast-store";
 import { isEscalated, slaFor, slaSummary, stageDef, type StageNo } from "@/lib/claims";
 import { Button } from "@/components/ui/button";
 import { PillTabs } from "@/components/ui/pill-tabs";
@@ -20,21 +19,9 @@ import { SlaSettings } from "./sla-settings";
 const PAGE = 24;
 
 /** Header actions every Claims list page shares. */
-export function ClaimsActions({ withReset }: { withReset?: boolean }) {
-  const resetSample = useClaims((s) => s.resetSample);
+export function ClaimsActions() {
   return (
     <>
-      {withReset && (
-        <Button
-          variant="ghost"
-          onClick={() => {
-            resetSample();
-            toast.success("Demo claims reset", "Fresh sample claims at every stage, with timers set from now.");
-          }}
-        >
-          Reset demo data
-        </Button>
-      )}
       <AlertSoundToggle />
       <SlaSettings />
       <NewClaimButton />
@@ -51,8 +38,10 @@ export function Workspace({ stage }: { stage?: StageNo }) {
   const [limit, setLimit] = useState(PAGE);
   const { q, showroom } = useClaimFilters();
   const stats = useClaimStats();
-  const resetSample = useClaims((s) => s.resetSample);
   const { shown, counts } = useClaimList(status, stage);
+  const hydrated = useClaims((s) => s.hydrated);
+  const loadError = useClaims((s) => s.loadError);
+  const reload = useClaims((s) => s.load);
   const now = useClock();
   const def = stage ? stageDef(stage) : null;
   // High severity on screen: a claim here has been escalated to Top Management.
@@ -73,8 +62,16 @@ export function Workspace({ stage }: { stage?: StageNo }) {
       <PageHeader
         title={def ? `${def.no}. ${def.name}` : "Claims & Workshop"}
         description={def ? `${def.blurb} SLA: ${slaSummary(def.no)}.` : "Every accident-repair claim through the 10-stage SOP. Pick a stage in the side menu, or open Code Red for anything overdue."}
-        actions={<ClaimsActions withReset={!stage} />}
+        actions={<ClaimsActions />}
       />
+      {loadError && (
+        <Card className="mb-4 flex items-center gap-3 border-red-500/40 px-4 py-3 text-[13px] text-fg">
+          <span className="flex-1">Couldn&apos;t load claims from the database. What you see may be out of date.</span>
+          <Button size="sm" onClick={() => void reload()}>
+            Retry
+          </Button>
+        </Card>
+      )}
       <StatsBar />
       <PipelineOverview active={stage} />
 
@@ -94,13 +91,8 @@ export function Workspace({ stage }: { stage?: StageNo }) {
         empty={
           <Card className="flex flex-col items-center px-6 py-14 text-center">
             <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl border border-line bg-hover text-muted">{filtering ? <SearchX className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}</span>
-            <p className="text-sm font-medium text-fg">{filtering ? "No claims match" : stage ? "No vehicles in this stage" : "No claims yet"}</p>
-            <p className="mt-1 max-w-sm text-[13px] text-muted">{filtering ? "Try another status, showroom or search." : stage ? "Vehicles appear here as claims reach this stage." : "Open a new claim, or load the demo data to see a claim at every stage."}</p>
-            {!stats.total && !stage && (
-              <Button className="mt-4" onClick={resetSample}>
-                Load demo claims
-              </Button>
-            )}
+            <p className="text-sm font-medium text-fg">{!hydrated ? "Loading claims…" : filtering ? "No claims match" : stage ? "No vehicles in this stage" : "No claims found"}</p>
+            <p className="mt-1 max-w-sm text-[13px] text-muted">{filtering ? "Try another status, showroom or search." : stage ? "Vehicles appear here as claims reach this stage." : "Claims appear here once they are opened with New Claim."}</p>
           </Card>
         }
       />
