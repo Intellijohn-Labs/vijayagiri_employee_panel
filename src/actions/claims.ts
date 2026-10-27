@@ -115,7 +115,7 @@ export async function createClaim(claim: Claim, actor: string, dueAt?: number): 
         await syncJobCard(tx, saved);
         await syncHistory(tx, saved, actor, dueAt);
       });
-      await logAudit({ action: "claim.create", entity: "claim", entityId: saved.id, branchId: saved.branchId, details: { ref, customer: saved.customerName, regNo: saved.regNo } });
+      await logAudit({ action: "CLAIM_CREATED", entity: "Claim", entityId: saved.id, branchId: saved.branchId, details: { ref, customer: saved.customerName, regNo: saved.regNo } });
       revalidatePath("/claims");
       return { ok: true, claim: saved };
     } catch (e) {
@@ -138,8 +138,8 @@ export async function saveClaim(claim: Claim, actor: string, dueAt?: number): Pr
       await syncJobCard(tx, claim);
       await syncHistory(tx, claim, actor, dueAt);
     });
-    if (before && before.currentStage !== claim.stage) await logAudit({ action: "claim.stage_change", entity: "claim", entityId: claim.id, branchId: claim.branchId, details: { ref: before.ref, from: before.currentStage, to: claim.stage, stage: STAGES[claim.stage - 1]?.name } });
-    if (before && !before.closedAt && claim.closedAt) await logAudit({ action: "claim.delivered", entity: "claim", entityId: claim.id, branchId: claim.branchId, details: { ref: before.ref, customer: claim.customerName } });
+    if (before && before.currentStage !== claim.stage) await logAudit({ action: "STAGE_CHANGED", entity: "Claim", entityId: claim.id, branchId: claim.branchId, details: { ref: before.ref, from: before.currentStage, to: claim.stage, stage: STAGES[claim.stage - 1]?.name } });
+    if (before && !before.closedAt && claim.closedAt) await logAudit({ action: "CLAIM_DELIVERED", entity: "Claim", entityId: claim.id, branchId: claim.branchId, details: { ref: before.ref, customer: claim.customerName } });
     revalidatePath("/claims");
     return { ok: true, claim };
   } catch (e) {
@@ -154,7 +154,7 @@ export async function deleteClaim(id: string): Promise<{ ok: true } | { ok: fals
     const claim = await prisma.claim.findUnique({ where: { id }, select: { ref: true, branchId: true, customerName: true, currentStage: true } });
     if (!claim) return { ok: false, error: "Claim not found" };
     await prisma.claim.delete({ where: { id } });
-    await logAudit({ action: "claim.delete", entity: "claim", entityId: id, branchId: claim.branchId, details: { ref: claim.ref, customer: claim.customerName, stage: claim.currentStage } });
+    await logAudit({ action: "CLAIM_DELETED", entity: "Claim", entityId: id, branchId: claim.branchId, details: { ref: claim.ref, customer: claim.customerName, stage: claim.currentStage } });
     revalidatePath("/claims");
     return { ok: true };
   } catch {

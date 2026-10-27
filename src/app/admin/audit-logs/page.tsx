@@ -12,24 +12,25 @@ import { Badge, Card, Input, PageHeader } from "@/components/ui/primitives";
 
 const ENTITIES = [
   { value: "all", label: "Everything" },
-  { value: "claim", label: "Claims" },
-  { value: "employee", label: "Employees" },
-  { value: "branch", label: "Branches" },
-  { value: "auth", label: "Sign-ins" },
+  { value: "Claim", label: "Claims" },
+  { value: "Employee", label: "Employees" },
+  { value: "Branch", label: "Branches" },
+  { value: "Auth", label: "Sign-ins" },
 ];
 
-const tone = (action: string) => (action.endsWith("delete") ? "danger" : action.includes("failed") || action.includes("locked") || action.includes("deactivate") ? "warn" : action.endsWith("create") ? "ok" : action.startsWith("claim.stage") || action.endsWith("delivered") ? "accent" : "neutral");
+const tone = (action: string) =>
+  action.includes("DELETED") ? "danger" : /FAILED|LOCKED|DEACTIVATED/.test(action) ? "warn" : action.includes("CREATED") ? "ok" : /STAGE|DELIVERED/.test(action) ? "accent" : "neutral";
 
-/** "claim.stage_change" -> "Claim · stage change" */
+/** "STAGE_CHANGED" -> "Stage changed" */
 const label = (action: string) => {
-  const [entity, rest = ""] = action.split(".");
-  return `${entity[0].toUpperCase()}${entity.slice(1)} · ${rest.replace(/_/g, " ")}`;
+  const t = action.toLowerCase().replace(/_/g, " ");
+  return `${t[0].toUpperCase()}${t.slice(1)}`;
 };
 
 const summary = (d: AuditRow["details"]) =>
   d
     ? Object.entries(d)
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
+        .map(([k, v]) => `${k}: ${v && typeof v === "object" && !Array.isArray(v) ? Object.entries(v).map(([f, c]) => `${f} ${c}`).join("; ") || "no changes" : Array.isArray(v) ? v.join(", ") : String(v)}`)
         .join(" · ")
     : "";
 
@@ -132,14 +133,15 @@ export default function AuditLogsPage() {
                     <td className="whitespace-nowrap px-4 py-3 tabular-nums text-muted">{fmtDateTime(r.at)}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-fg">{r.actorName}</p>
-                      <p className="font-mono text-[11px] text-faint">{r.actorEmail}</p>
+                      <p className="font-mono text-[11px] text-faint">{r.actor}</p>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <Badge tone={tone(r.action)}>{label(r.action)}</Badge>
+                      <p className="mt-1 text-[11px] text-faint">{r.entity}</p>
                     </td>
                     <td className="max-w-[340px] px-4 py-3 text-muted">{summary(r.details) || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted">{r.branchId ?? "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-[11.5px] text-faint">{r.ip ?? "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-[11.5px] text-faint">{r.ipAddress ?? "—"}</td>
                   </tr>
                 ))}
                 {loading && rows.length === 0 && (

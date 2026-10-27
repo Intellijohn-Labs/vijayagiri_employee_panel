@@ -36,7 +36,7 @@ export async function createBranch(formData: FormData): Promise<BranchResult> {
   if ("error" in parsed) return { ok: false, error: parsed.error };
   try {
     const branch = await prisma.branch.create({ data: { ...parsed.data, name: parsed.data.name!, code: parsed.data.code! } });
-    await logAudit({ action: "branch.create", entity: "branch", entityId: branch.code, branchId: branch.code, details: { name: branch.name } });
+    await logAudit({ action: "BRANCH_CREATED", entity: "Branch", entityId: branch.code, branchId: branch.code, details: { name: branch.name } });
     refresh();
     return { ok: true, branch };
   } catch (e) {
@@ -51,7 +51,11 @@ export async function updateBranch(id: string, formData: FormData): Promise<Bran
   const parsed = parseBranchInput(formData, true);
   if ("error" in parsed) return { ok: false, error: parsed.error };
   try {
+    const old = (await prisma.branch.findUnique({ where: { code: id } })) as Record<string, unknown> | null;
     const branch = await prisma.branch.update({ where: { code: id }, data: { ...parsed.data, name: parsed.data.name ?? undefined } });
+    // Old → new for each field the edit actually changed.
+    const changes = Object.fromEntries(Object.entries(parsed.data).filter(([k, v]) => old && String(old[k] ?? "") !== String(v ?? "")).map(([k, v]) => [k, `${String(old?.[k] ?? "—")} → ${String(v ?? "—")}`]));
+    await logAudit({ action: "BRANCH_UPDATED", entity: "Branch", entityId: id, branchId: id, details: { name: branch.name, changes } });
     refresh();
     return { ok: true, branch };
   } catch (e) {
@@ -66,7 +70,7 @@ export async function toggleBranchStatus(id: string): Promise<BranchResult> {
     const current = await prisma.branch.findUnique({ where: { code: id }, select: { isActive: true } });
     if (!current) return { ok: false, error: "Branch not found" };
     const branch = await prisma.branch.update({ where: { code: id }, data: { isActive: !current.isActive } });
-    await logAudit({ action: branch.isActive ? "branch.activate" : "branch.deactivate", entity: "branch", entityId: id, branchId: id, details: { name: branch.name } });
+    await logAudit({ action: branch.isActive ? "BRANCH_ACTIVATED" : "BRANCH_DEACTIVATED", entity: "Branch", entityId: id, branchId: id, details: { name: branch.name } });
     refresh();
     return { ok: true, branch };
   } catch (e) {
@@ -93,7 +97,7 @@ export async function deleteBranch(id: string): Promise<{ ok: true } | { ok: fal
       }
       await tx.branch.delete({ where: { id: branch.id } });
     });
-    await logAudit({ action: "branch.delete", entity: "branch", entityId: id, branchId: id, details: { name: branch.name } });
+    await logAudit({ action: "BRANCH_DELETED", entity: "Branch", entityId: id, branchId: id, details: { name: branch.name } });
     refresh();
     revalidatePath("/employees");
     return { ok: true };

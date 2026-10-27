@@ -146,24 +146,27 @@ model Employee {
   updatedAt   DateTime @updatedAt
 }
 
-/// Who did what, and when: employee changes, branch changes, claim creation, stage moves, deletions and sign-ins.
+/// Portal activity trail: employee changes, branch changes, claim creation, stage moves, deletions and sign-ins.
 /// Readable only by the root admin (admin@vijayagiri.in).
 model AuditLog {
-  id         String   @id @default(cuid())
-  at         DateTime @default(now())
-  actorEmail String
-  actorName  String
-  /// e.g. "employee.create", "claim.stage_change", "branch.delete", "auth.login"
-  action     String
-  /// employee | branch | claim | auth
-  entity     String
-  entityId   String?
+  id        String   @id @default(cuid())
+  /// e.g. "CLAIM_CREATED", "STAGE_CHANGED", "EMPLOYEE_UPDATED", "CLAIM_DELETED"
+  action    String
+  /// e.g. "Claim", "Employee", "Branch", "Auth"
+  entity    String
+  entityId  String?
+  /// Email of the user who performed the action
+  actor     String
+  /// Display name of that user, kept so the viewer needn't look them up (they may since have been deleted)
+  actorName String   @default("")
   /// Showroom (Branch.code) the action relates to, when it has one
-  branchId   String?
-  ip         String?
-  details    Json?
+  branchId  String?
+  /// Old values, new values, or a description of the change
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
 
-  @@index([at])
+  @@index([createdAt])
   @@index([action])
-  @@index([actorEmail])
+  @@index([actor])
 }

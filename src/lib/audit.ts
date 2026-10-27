@@ -5,7 +5,7 @@ import { sessionEmployee } from "@/lib/session";
 
 export interface AuditEntry {
   action: string;
-  entity: "employee" | "branch" | "claim" | "auth";
+  entity: "Employee" | "Branch" | "Claim" | "Auth";
   entityId?: string;
   /** Showroom code the action relates to */
   branchId?: string | null;
@@ -25,13 +25,13 @@ export async function logAudit(entry: AuditEntry) {
     const me = entry.actor ? null : await sessionEmployee();
     await prisma.auditLog.create({
       data: {
-        actorEmail: entry.actor?.email ?? me?.email ?? "unknown",
+        actor: entry.actor?.email ?? me?.email ?? "unknown",
         actorName: entry.actor?.name ?? me?.name ?? "Unknown",
         action: entry.action,
         entity: entry.entity,
         entityId: entry.entityId,
         branchId: entry.branchId ?? undefined,
-        ip: await clientIp(),
+        ipAddress: await clientIp(),
         details: (entry.details ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });

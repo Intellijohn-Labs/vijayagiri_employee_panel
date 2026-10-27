@@ -67,7 +67,7 @@ export async function signInAction(identifier: string, password: string): Promis
   await ensureSeeded(prisma);
   const key = norm(identifier);
   if (locked(key)) {
-    await logAudit({ action: "auth.locked", entity: "auth", actor: { email: key, name: "Unknown" }, details: { identifier: key } });
+    await logAudit({ action: "AUTH_LOCKED", entity: "Auth", actor: { email: key, name: "Unknown" }, details: { identifier: key } });
     return { ok: false, reason: "locked" };
   }
   const row = await byIdentifier(identifier);
@@ -76,12 +76,12 @@ export async function signInAction(identifier: string, password: string): Promis
   if (!row.password) return { ok: false, reason: "not-activated" };
   if (!(await verifyPassword(password, row.password))) {
     failed(key);
-    await logAudit({ action: "auth.login_failed", entity: "auth", entityId: row.id, actor: { email: row.email, name: row.name }, details: { reason: "wrong password" } });
+    await logAudit({ action: "AUTH_LOGIN_FAILED", entity: "Auth", entityId: row.id, actor: { email: row.email, name: row.name }, details: { reason: "wrong password" } });
     return { ok: false, reason: "wrong-password" };
   }
   failures.delete(key);
   await startSession(row);
-  await logAudit({ action: "auth.login", entity: "auth", entityId: row.id, actor: { email: row.email, name: row.name } });
+  await logAudit({ action: "AUTH_LOGIN", entity: "Auth", entityId: row.id, actor: { email: row.email, name: row.name } });
   return { ok: true, employee: toEmployee(row) };
 }
 
@@ -150,6 +150,15 @@ async function columns(input: EmployeeInput): Promise<{ data: Prisma.EmployeeUnc
   };
 }
 
+/** Old → new for each field an edit actually changed. */
+const changes = (a: Row, b: Row) => {
+  const out: Record<string, string> = {};
+  for (const k of ["name", "email", "phone", "whatsapp", "role", "allBranches", "branchCodes", "isActive"] as const) {
+    if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) out[k] = `${[a[k]].flat().join(", ") || "—"} → ${[b[k]].flat().join(", ") || "—"}`;
+  }
+  return out;
+};
+
 const conflict = (e: unknown): string => {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
     if (e.code === "P2002") {
@@ -175,7 +184,7 @@ export async function createEmployee(input: EmployeeInput): Promise<EmployeeResu
   if (parsed.data.isActive === false && !isRootEmail(me.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
   try {
     const row = await prisma.employee.create({ data: parsed.data as Prisma.EmployeeUncheckedCreateInput });
-    await logAudit({ action: "employee.create", entity: "employee", entityId: row.id, details: { name: row.name, email: row.email, role: row.role } });
+    await logAudit({ action: "EMPLOYEE_CREATED", entity: "Employee", entityId: row.id, details: { name: row.name, email: row.email, role: row.role } });
     revalidatePath("/employees");
     return { ok: true, employee: toEmployee(row) };
   } catch (e) {
@@ -206,7 +215,7 @@ export async function updateEmployee(id: string, input: EmployeeInput): Promise<
   if (current.role === "Admin" && current.isActive && !stillActiveAdmin && (await lastAdmin(id))) return { ok: false, error: "At least one Active Admin must remain" };
   try {
     const row = await prisma.employee.update({ where: { id }, data: parsed.data });
-    await logAudit({ action: "employee.update", entity: "employee", entityId: id, details: { name: row.name, email: row.email, ...(current.role !== row.role && { role: `${current.role} → ${row.role}` }) } });
+    await logAudit({ action: "EMPLOYEE_UPDATED", entity: "Employee", entityId: id, details: { name: row.name, changes: changes(current, row) } });
     revalidatePath("/employees");
     return { ok: true, employee: toEmployee(row) };
   } catch (e) {
@@ -228,7 +237,7 @@ export async function toggleEmployeeStatus(id: string): Promise<EmployeeResult> 
   }
   try {
     const row = await prisma.employee.update({ where: { id }, data: { isActive: !current.isActive } });
-    await logAudit({ action: row.isActive ? "employee.activate" : "employee.deactivate", entity: "employee", entityId: id, details: { name: row.name, email: row.email } });
+    await logAudit({ action: row.isActive ? "EMPLOYEE_ACTIVATED" : "EMPLOYEE_DEACTIVATED", entity: "Employee", entityId: id, details: { name: row.name, email: row.email } });
     revalidatePath("/employees");
     return { ok: true, employee: toEmployee(row) };
   } catch (e) {
@@ -246,7 +255,7 @@ export async function deleteEmployee(id: string): Promise<{ ok: true } | { ok: f
   try {
     // Nothing else in the database points at an employee (claims keep the name as text), so a plain delete is enough.
     await prisma.employee.delete({ where: { id } });
-    await logAudit({ action: "employee.delete", entity: "employee", entityId: id, details: { name: target.name, email: target.email, role: target.role } });
+    await logAudit({ action: "EMPLOYEE_DELETED", entity: "Employee", entityId: id, details: { name: target.name, email: target.email, role: target.role } });
     revalidatePath("/employees");
     return { ok: true };
   } catch (e) {
