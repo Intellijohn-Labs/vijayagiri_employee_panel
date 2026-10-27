@@ -4,6 +4,7 @@ import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { Camera, Check, Trash2 } from "lucide-react";
 import { useAllBranches } from "@/store/branch-store";
 import { EMPLOYEE_ROLES, codeTaken, emailTaken, intlDigits, nextEmployeeCode, useEmployees, useSessionEmployee, type Employee, type EmployeeRole, type EmployeeStatus } from "@/store/employee-store";
+import { ROOT_ONLY_MESSAGE, isRootEmail } from "@/lib/employees";
 import { toast } from "@/store/toast-store";
 import { ACCEPTED_TYPES, processAvatar, validateImage } from "@/lib/images";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,9 @@ function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee 
   const update = useEmployees((s) => s.update);
   const me = useSessionEmployee();
   const editing = !!employee;
+  // The root admin's email, role and status are fixed, and only the root admin may change anyone's status.
+  const rootTarget = isRootEmail(employee?.email);
+  const lockStatus = rootTarget || !isRootEmail(me?.email);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [f, setF] = useState({
@@ -171,7 +175,7 @@ function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee 
         <Input data-autofocus value={f.name} invalid={!!errors.name} onChange={(ev) => set("name", ev.target.value)} placeholder="e.g. Anil Gowda" />
       </Field>
       <Field label="Official email address" required error={errors.email} hint="Used to sign in">
-        <Input type="email" value={f.email} invalid={!!errors.email} onChange={(ev) => set("email", ev.target.value)} placeholder="name@vijayagiri.in" autoComplete="off" />
+        <Input type="email" value={f.email} invalid={!!errors.email} onChange={(ev) => set("email", ev.target.value)} placeholder="name@vijayagiri.in" autoComplete="off" disabled={rootTarget} />
       </Field>
 
       <Field label="Phone number" required error={errors.phone}>
@@ -216,7 +220,7 @@ function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee 
 
       <Field label="Role" error={errors.role}>
         <div className="[&>div]:flex [&>div]:w-full">
-          <Select<EmployeeRole> value={f.role} onChange={(v) => set("role", v)} options={EMPLOYEE_ROLES.map((r) => ({ value: r, label: r }))} />
+          <Select<EmployeeRole> value={f.role} onChange={(v) => set("role", v)} options={EMPLOYEE_ROLES.map((r) => ({ value: r, label: r }))} disabled={rootTarget} />
         </div>
       </Field>
       <Field label="Employee ID / code" required error={errors.code} hint={editing ? undefined : "Auto-generated"}>
@@ -227,7 +231,7 @@ function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee 
         <span className="mb-1.5 block text-xs font-medium text-fg">Status</span>
         <div role="radiogroup" aria-label="Status" className="grid grid-cols-2 gap-2">
           {(["Active", "Inactive"] as EmployeeStatus[]).map((s) => (
-            <button key={s} type="button" role="radio" aria-checked={f.status === s} onClick={() => set("status", s)} className={cn("flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/40", f.status === s ? "border-blue-600/60 bg-tint font-medium text-fg shadow-ring" : "border-line bg-surface text-muted hover:border-strong hover:text-fg")}>
+            <button key={s} type="button" role="radio" aria-checked={f.status === s} disabled={lockStatus} onClick={() => set("status", s)} className={cn("disabled:cursor-not-allowed disabled:opacity-60", "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/40", f.status === s ? "border-blue-600/60 bg-tint font-medium text-fg shadow-ring" : "border-line bg-surface text-muted hover:border-strong hover:text-fg")}>
               <span className={cn("h-2.5 w-2.5 rounded-full", s === "Active" ? "bg-emerald-500 shadow-[0_0_8px_1px_rgba(16,185,129,0.6)]" : "bg-slate-400")} />
               {s}
               {f.status === s && <Check className="ml-auto h-3.5 w-3.5 text-accent-text" />}
@@ -235,7 +239,8 @@ function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee 
           ))}
         </div>
         {errors.status && <p className="mt-1 text-[11.5px] text-danger">{errors.status}</p>}
-        {f.status === "Inactive" && !errors.status && <p className="mt-1 text-[11.5px] text-muted">Inactive employees can&apos;t sign in.</p>}
+        {lockStatus && !errors.status && <p className="mt-1 text-[11.5px] text-muted">{rootTarget ? "The root admin account is protected." : ROOT_ONLY_MESSAGE}</p>}
+        {!lockStatus && f.status === "Inactive" && !errors.status && <p className="mt-1 text-[11.5px] text-muted">Inactive employees can&apos;t sign in.</p>}
       </div>
     </form>
   );

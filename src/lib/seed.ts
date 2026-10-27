@@ -1,6 +1,8 @@
 import type { PrismaClient } from "../generated/prisma/client";
 import { seedRows } from "./branch-api";
+import { randomBytes } from "node:crypto";
 import { hashPassword } from "./password";
+import { ROOT_ADMIN_EMAIL } from "./employees";
 
 /** Starting password for the seeded staff accounts. Change it in the portal after the first sign-in. */
 export const DEFAULT_PASSWORD = "demo@1234";
@@ -17,8 +19,21 @@ export async function seedBranches(db: PrismaClient) {
   for (const row of seedRows()) await db.branch.upsert({ where: { code: row.code }, update: {}, create: row });
 }
 
+/**
+ * Creates the Root Super Admin if it's missing. Its password is ROOT_ADMIN_PASSWORD from the server's environment; without
+ * one, a random password is generated and printed once (in the deploy log), never the shared demo password.
+ */
+export async function seedRootAdmin(db: PrismaClient) {
+  if (await db.employee.findUnique({ where: { email: ROOT_ADMIN_EMAIL }, select: { id: true } })) return;
+  const chosen = process.env.ROOT_ADMIN_PASSWORD;
+  const password = chosen || randomBytes(12).toString("base64url");
+  await db.employee.create({ data: { code: "VAA-EMP-000", name: "Root Admin", email: ROOT_ADMIN_EMAIL, phone: "+91 99617 74455", whatsapp: "+91 99617 74455", role: "Admin", allBranches: true, branchCodes: [], password: await hashPassword(password) } });
+  console.log(chosen ? `Root admin ${ROOT_ADMIN_EMAIL} created with the password from ROOT_ADMIN_PASSWORD.` : `Root admin ${ROOT_ADMIN_EMAIL} created. One-time password: ${password}  (change it after signing in)`);
+}
+
 /** Adds any missing default accounts; existing rows (and their edits) are left alone. */
 export async function seedEmployees(db: PrismaClient) {
+  await seedRootAdmin(db);
   const password = await hashPassword(DEFAULT_PASSWORD);
   for (const e of EMPLOYEES) {
     const codes = e.access === "all" ? [] : e.access;

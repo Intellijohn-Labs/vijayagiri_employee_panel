@@ -25,3 +25,9 @@ export interface Employee {
 
 /** What the Employees form sends; the server adds the id, password and timestamps. */
 export type EmployeeInput = Pick<Employee, "name" | "email" | "phone" | "whatsapp" | "role" | "access" | "status" | "code"> & { photo?: string };
+
+/** The permanent Root Super Admin. This account can't be deactivated, demoted or have its credentials changed, and only it may deactivate or reactivate other staff. */
+export const ROOT_ADMIN_EMAIL = "admin@vijayagiri.in";
+export const isRootEmail = (email?: string | null) => email?.trim().toLowerCase() === ROOT_ADMIN_EMAIL;
+export const ROOT_ONLY_MESSAGE = "Only root admin (admin@vijayagiri.in) has full delete/management permissions.";
+export const ROOT_PROTECTED_MESSAGE = "The root admin account (admin@vijayagiri.in) is protected and can't be changed this way.";

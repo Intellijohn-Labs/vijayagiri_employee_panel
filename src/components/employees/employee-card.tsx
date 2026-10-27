@@ -7,6 +7,7 @@ import { intlDigits, type Employee } from "@/store/employee-store";
 import { cn } from "@/lib/utils";
 import { fadeUp, spring } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
+import { ROOT_ONLY_MESSAGE, isRootEmail } from "@/lib/employees";
 import { Avatar, Badge } from "@/components/ui/primitives";
 
 export function WhatsAppIcon({ className }: { className?: string }) {
@@ -22,9 +23,10 @@ const LOGO_MASK = "url(/images/vijayagiri-logo.png)";
 const maskStyle = { WebkitMaskImage: LOGO_MASK, maskImage: LOGO_MASK, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "left center", maskPosition: "left center" } as const;
 
 /** A vertical corporate smart-badge for one employee. */
-export function EmployeeCard({ employee: e, isYou, onEdit, onToggle }: { employee: Employee; isYou: boolean; onEdit: () => void; onToggle: () => void }) {
+export function EmployeeCard({ employee: e, isYou, canManage, onEdit, onToggle }: { employee: Employee; isYou: boolean; /** Only the root admin may deactivate or reactivate staff */ canManage: boolean; onEdit: () => void; onToggle: () => void }) {
   const branches = useAllBranches();
   const active = e.status === "Active";
+  const root = isRootEmail(e.email);
   const waDigits = intlDigits(e.whatsapp || e.phone);
   const telDigits = intlDigits(e.phone);
 
@@ -58,6 +60,7 @@ export function EmployeeCard({ employee: e, isYou, onEdit, onToggle }: { employe
           <h3 className="text-[17px] font-bold leading-6 tracking-tight text-fg">{e.name}</h3>
           <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5">
             <Badge tone="accent">{e.role}</Badge>
+            {root && <Badge tone="ok">Root Admin</Badge>}
             {isYou && <Badge tone="info">You</Badge>}
             {!active && <Badge>Inactive</Badge>}
             {active && !e.activated && <Badge tone="warn">Awaiting activation</Badge>}
@@ -111,7 +114,7 @@ export function EmployeeCard({ employee: e, isYou, onEdit, onToggle }: { employe
           <Button size="sm" leading={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>
             Edit Details
           </Button>
-          <Button size="sm" variant="ghost" leading={<Power className="h-3.5 w-3.5" />} onClick={onToggle} disabled={isYou} title={isYou ? "You can't deactivate your own account" : undefined}>
+          <Button size="sm" variant="ghost" leading={<Power className="h-3.5 w-3.5" />} onClick={onToggle} disabled={isYou || root || !canManage} title={root ? "The root admin account is protected" : isYou ? "You can't deactivate your own account" : !canManage ? ROOT_ONLY_MESSAGE : undefined}>
             {active ? "Deactivate" : "Activate"}
           </Button>
         </div>

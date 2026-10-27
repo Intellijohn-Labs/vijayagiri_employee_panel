@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Lock, Plus, Search, SearchX, UserPlus, Users } from "lucide-react";
 import { canAccess, useEmployees, useSessionEmployee, type Employee, type EmployeeRole } from "@/store/employee-store";
+import { isRootEmail } from "@/lib/employees";
 import { useAllBranches } from "@/store/branch-store";
 import { branchLabel } from "@/lib/branches";
 import { toast } from "@/store/toast-store";
@@ -154,6 +155,7 @@ export default function EmployeesPage() {
                 key={e.id}
                 employee={e}
                 isYou={e.id === me?.id}
+                canManage={isRootEmail(me?.email)}
                 onEdit={() => {
                   setEditing(e);
                   setOpen(true);

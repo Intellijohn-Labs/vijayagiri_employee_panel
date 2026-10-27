@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { endSession, sessionEmployee, startSession } from "@/lib/session";
 import { ensureSeeded } from "@/lib/seed";
-import { EMPLOYEE_ROLES, type Employee, type EmployeeInput, type EmployeeRole } from "@/lib/employees";
+import { EMPLOYEE_ROLES, ROOT_ONLY_MESSAGE, ROOT_PROTECTED_MESSAGE, isRootEmail, type Employee, type EmployeeInput, type EmployeeRole } from "@/lib/employees";
 
 export type EmployeeResult = { ok: true; employee: Employee } | { ok: false; error: string };
 export type AuthResult = { ok: true; employee: Employee } | { ok: false; reason: "not-found" | "inactive" | "not-activated" | "wrong-password" | "locked" };
@@ -164,6 +164,9 @@ export async function createEmployee(input: EmployeeInput): Promise<EmployeeResu
   if (me?.role !== "Admin") return { ok: false, error: NOT_ADMIN };
   const parsed = await columns(input);
   if ("error" in parsed) return { ok: false, error: parsed.error };
+  if (isRootEmail(String(parsed.data.email))) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
+  // Only the root admin can add someone as already inactive.
+  if (parsed.data.isActive === false && !isRootEmail(me.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
   try {
     const row = await prisma.employee.create({ data: parsed.data as Prisma.EmployeeUncheckedCreateInput });
     revalidatePath("/employees");
@@ -180,6 +183,16 @@ export async function updateEmployee(id: string, input: EmployeeInput): Promise<
   if ("error" in parsed) return { ok: false, error: parsed.error };
   const current = await prisma.employee.findUnique({ where: { id } });
   if (!current) return { ok: false, error: "Employee not found" };
+  if (isRootEmail(current.email)) {
+    // The root admin may only touch its own profile details, never its email, role, access or status; nobody else may touch it at all.
+    if (!isRootEmail(me.email)) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
+    const d = parsed.data;
+    if (!isRootEmail(String(d.email)) || d.role !== "Admin" || d.allBranches !== true || d.isActive === false) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
+  }
+  // Only the root admin may change anyone's active / inactive status, whichever form it comes through.
+  if (current.isActive !== (parsed.data.isActive !== false) && !isRootEmail(me.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
+  // Nobody can take the root admin's email address.
+  if (isRootEmail(String(parsed.data.email)) && !isRootEmail(current.email)) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
   // Never lock the portal out of its last administrator, or lock yourself out.
   if (id === me.id && parsed.data.isActive === false) return { ok: false, error: "You can't deactivate your own account" };
   const stillActiveAdmin = parsed.data.role === "Admin" && parsed.data.isActive !== false;
@@ -199,6 +212,8 @@ export async function toggleEmployeeStatus(id: string): Promise<EmployeeResult> 
   if (me?.role !== "Admin") return { ok: false, error: NOT_ADMIN };
   const current = await prisma.employee.findUnique({ where: { id } });
   if (!current) return { ok: false, error: "Employee not found" };
+  if (isRootEmail(current.email)) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
+  if (!isRootEmail(me.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
   if (current.isActive) {
     if (id === me.id) return { ok: false, error: "You can't deactivate your own account" };
     if (current.role === "Admin" && (await lastAdmin(id))) return { ok: false, error: "At least one Active Admin must remain" };
