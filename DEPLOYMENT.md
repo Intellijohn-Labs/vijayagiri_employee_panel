@@ -37,15 +37,14 @@ GRANT ALL ON SCHEMA public TO yamaha_admin;
 \q
 ```
 
-Create `.env.production` in the project root (after cloning in step 3):
+Create `.env.production` in the project root (after cloning in step 3) from the template:
 
 ```bash
+cp .env.example .env.production
 nano .env.production
 ```
 
-```env
-DATABASE_URL="postgresql://yamaha_admin:your_secure_password@localhost:5432/vijayagiri_db?schema=public"
-```
+Replace `YOUR_SECURE_PASSWORD` with the database password above, and `YOUR_32_CHAR_SECRET_KEY` with a generated secret (`openssl rand -base64 32`). The app runs on **port 3006**.
 
 If the app uses an ORM, run migrations after `npm install` (before `npm run build`):
 
@@ -65,7 +64,7 @@ cd vijayagiri_employee_panel
 npm install
 npm run build
 
-pm2 start npm --name "yamaha-portal" -- start
+PORT=3006 HOSTNAME=0.0.0.0 pm2 start npm --name "yamaha-portal" -- start
 ```
 
 Auto-restart on reboot (run the command `pm2 startup` prints, then save):
@@ -77,7 +76,7 @@ pm2 save
 
 ## 4. Nginx & Domain
 
-Replace `your-domain.com` with your domain (point its DNS A record to the VPS IP first).
+Point the DNS A record for `portal.vijayagiriyamaha.com` (or your own domain, if different) to the VPS IP first.
 
 ```bash
 sudo nano /etc/nginx/sites-available/yamaha-portal
@@ -86,10 +85,10 @@ sudo nano /etc/nginx/sites-available/yamaha-portal
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name portal.vijayagiriyamaha.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3006;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -110,7 +109,7 @@ Free SSL (Let's Encrypt):
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
+sudo certbot --nginx -d portal.vijayagiriyamaha.com
 ```
 
 ## 5. Update the App
