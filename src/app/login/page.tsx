@@ -3,32 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { AlertTriangle, CircleHelp, Mail, Moon, ShieldAlert, Sun, X } from "lucide-react";
+import { AlertTriangle, CircleHelp, Mail, ShieldAlert, X } from "lucide-react";
 import { useApp } from "@/store/app-store";
-import { useTheme } from "@/store/theme-store";
 import { HQ_ID } from "@/lib/branches";
 import { useBranchTools } from "@/store/branch-store";
 import { Popover } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/primitives";
 import { ActivationFlow } from "@/components/auth/activation";
 import { PasscodeStep } from "@/components/auth/passcode";
-import { BrandShowcase } from "@/components/auth/brand-showcase";
+import { AmbientBackground } from "@/components/auth/ambient-background";
 import { AuthField, BrandLogo, PasswordField, SubmitButton, linkCls, stepMotion, type AuthStage } from "@/components/auth/auth-ui";
 import { useSettings } from "@/store/settings-store";
 import { forgotPassword, loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
 import { ACCESS_DENIED, authenticate, useEmployees, type Employee } from "@/store/employee-store";
 
-const utilityBtn = "grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 outline-none transition-colors hover:text-[#0020B2] focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white";
+const utilityBtn = "grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 outline-none backdrop-blur transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-sky-400/60";
 
-/** Theme toggle and help. */
+/** Help. */
 function Utilities() {
-  const { theme, toggle } = useTheme();
   const { byId: branchById } = useBranchTools();
   return (
     <div className="flex items-center gap-1.5">
-      <button type="button" onClick={toggle} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} className={utilityBtn}>
-        {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      </button>
       <Popover
         align="end"
         width={300}
@@ -214,29 +209,35 @@ export default function LoginPage() {
     return () => clearTimeout(t);
   }, [isFlipped]);
 
+  const unlocking = phase === "verify" || phase === "out";
+
   return (
-    <motion.div animate={phase === "out" ? { opacity: 0, scale: 1.02 } : { opacity: 1, scale: 1 }} transition={{ duration: 0.3, ease: "easeIn" }} className="grid min-h-[100dvh] lg:grid-cols-2">
-      <BrandShowcase />
+    <motion.div data-theme="dark" animate={phase === "out" ? { opacity: 0, scale: 1.02 } : { opacity: 1, scale: 1 }} transition={{ duration: 0.3, ease: "easeIn" }} className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 py-14 sm:px-6">
+      <AmbientBackground lit={unlocking} />
 
-      <main className="relative flex flex-col overflow-hidden bg-white dark:bg-[#0E1219]">
-        {/* ambient blue glow that fades in while the workspace is prepared */}
-        <motion.div aria-hidden initial={false} animate={{ opacity: phase === "verify" || phase === "out" ? 1 : 0 }} transition={{ duration: 0.5 }} className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,80,255,0.16),transparent_65%)]" />
-        <div className="flex justify-end p-4 sm:p-6">
-          <Utilities />
-        </div>
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-5">
+        <Utilities />
+      </div>
 
-        <div className="flex flex-1 items-center justify-center px-6 pb-12 sm:px-10">
-          <motion.div animate={phase === "verify" || phase === "out" ? { scale: 0.98 } : { scale: 1 }} transition={{ duration: 0.5, ease: "easeInOut" }} className="relative w-full max-w-[400px]">
-            {/* on phones and tablets the showcase is hidden, so the logo leads */}
-            <div className="mb-10 lg:hidden">
-              <BrandLogo />
-            </div>
+      <motion.div animate={unlocking ? { scale: 0.98 } : { scale: 1 }} transition={{ duration: 0.5, ease: "easeInOut" }} className="relative z-10 w-full max-w-[440px]">
+        {/* brand */}
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 260, damping: 24 }} className="mb-10 flex flex-col items-center text-center">
+          <BrandLogo onDark className="w-[210px] sm:w-[240px]" />
+          <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.22em] text-sky-200/90">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#0050FF] shadow-[0_0_10px_#0050FF]" />
+            Operations Hub &amp; Claim Management
+          </span>
+        </motion.div>
 
-            {/* The card: Sign in on the front, Activate your account on the back. */}
-            <div className="relative [perspective:1000px]">
-              <AnimatePresence>{(phase === "verify" || phase === "out") && <UnlockLine key="unlock" />}</AnimatePresence>
+        {/* floating glass card; the frosted pane stays put while its two faces turn */}
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 240, damping: 26, delay: 0.1 }} className="relative">
+          <AnimatePresence>{unlocking && <UnlockLine key="unlock" />}</AnimatePresence>
+          <div aria-hidden className="absolute inset-0 rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.025] shadow-[0_40px_90px_-30px_rgba(0,32,178,0.7),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#0050FF] to-transparent" />
+          <div className="relative">
+            <div className="[perspective:1000px]">
               <div className={`grid [transform-style:preserve-3d] transition-transform duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${isFlipped ? "[transform:rotateY(180deg)]" : ""}`}>
-                <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="[backface-visibility:hidden] [grid-area:1/1]">
+                <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="p-7 [backface-visibility:hidden] [grid-area:1/1] sm:p-9">
                   <AnimatePresence mode="wait" initial={false}>
                     {gate ? (
                       <PasscodeStep key="passcode" who={gate} stage={stage} onVerified={enter} onBack={() => setGate(null)} />
@@ -305,19 +306,19 @@ export default function LoginPage() {
                     )}
                   </AnimatePresence>
                 </div>
-                <div ref={back} inert={!isFlipped} aria-hidden={!isFlipped} className="[backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]">
+                <div ref={back} inert={!isFlipped} aria-hidden={!isFlipped} className="p-7 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)] sm:p-9">
                   <ActivationFlow stage={stage} active={isFlipped} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => flipTo(false)} onActivated={enter} />
                 </div>
               </div>
             </div>
+          </div>
+        </motion.div>
 
-            <p className="mt-10 text-center text-[12px] leading-5 text-slate-400 dark:text-slate-500">
-              Only employees registered in the directory can sign in.
-              <br />© {new Date().getFullYear()} {legalName}
-            </p>
-          </motion.div>
-        </div>
-      </main>
+        <p className="mt-8 px-4 text-center text-[12px] leading-5 text-slate-500">
+          Only employees registered in the directory can sign in.
+          <br />© {new Date().getFullYear()} {legalName}
+        </p>
+      </motion.div>
     </motion.div>
   );
 }
