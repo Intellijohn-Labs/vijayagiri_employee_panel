@@ -84,25 +84,21 @@ function NoticeBanner({ notice, onDismiss }: { notice: Notice; onDismiss: () => 
 }
 
 const clockFormat = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-/** How far each half of the logo slides apart, in px: enough to leave room for the clock between them. */
-const SPLIT = 56;
-
 /**
- * The logo, cut down the middle. Tapping it slides the halves apart to show a live digital clock in the gap; after 3 seconds
- * they slide back together. Kept in its own component so the ticking clock re-renders only this, not the sign-in form.
+ * The logo as a coin: tapping it flips it round to show a live digital clock, and after 3 seconds it flips back. Kept in its
+ * own component so the ticking clock re-renders only this, not the sign-in form.
  */
 function SplitLogo() {
-  const [showClock, setShowClock] = useState(false);
+  const [isLogoFlipped, setIsLogoFlipped] = useState(false);
   const [time, setTime] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // While the clock is open it ticks every second.
+  // While the clock face is showing it ticks every second.
   useEffect(() => {
-    if (!showClock) return;
-    const tick = () => setTime(clockFormat.format(new Date()));
-    const id = setInterval(tick, 1000);
+    if (!isLogoFlipped) return;
+    const id = setInterval(() => setTime(clockFormat.format(new Date())), 1000);
     return () => clearInterval(id);
-  }, [showClock]);
+  }, [isLogoFlipped]);
 
   useEffect(
     () => () => {
@@ -111,26 +107,26 @@ function SplitLogo() {
     [],
   );
 
-  const reveal = () => {
+  const flip = () => {
     setTime(clockFormat.format(new Date()));
-    setShowClock(true);
-    // Tapping again while it is open just restarts the 3 seconds.
+    setIsLogoFlipped(true);
+    // Tapping again while the clock shows just restarts the 3 seconds.
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setShowClock(false), 3000);
+    timer.current = setTimeout(() => setIsLogoFlipped(false), 3000);
   };
 
-  const half = "block transition-all duration-500 ease-out motion-reduce:transition-none";
   return (
-    <button type="button" onClick={reveal} aria-label="Vijayagiri — tap to show the time" className="relative block w-fit rounded-md outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60">
-      <span className="relative block">
-        <span className={half} style={{ clipPath: "inset(0 50% 0 0)", transform: showClock ? `translateX(-${SPLIT}px)` : "translateX(0)" }}>
+    <button type="button" onClick={flip} aria-label="Vijayagiri — tap to show the time" className="block w-fit cursor-pointer rounded-md outline-none [perspective:600px] focus-visible:ring-2 focus-visible:ring-sky-400/60">
+      <span className={`grid [transform-style:preserve-3d] transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${isLogoFlipped ? "[transform:rotateY(180deg)]" : ""}`}>
+        {/* front: the emblem */}
+        <span aria-hidden={isLogoFlipped} className="block [backface-visibility:hidden] [grid-area:1/1]">
           <BrandLogo onDark className="w-[210px] sm:w-[240px]" />
         </span>
-        <span aria-hidden className={`${half} absolute inset-0`} style={{ clipPath: "inset(0 0 0 50%)", transform: showClock ? `translateX(${SPLIT}px)` : "translateX(0)" }}>
-          <BrandLogo onDark className="w-[210px] sm:w-[240px]" />
-        </span>
-        <span role="timer" aria-hidden={!showClock} className="pointer-events-none absolute inset-0 grid place-items-center whitespace-nowrap font-mono text-sm font-bold tracking-widest text-cyan-300 transition-opacity duration-500 ease-out [text-shadow:0_0_14px_rgba(34,211,238,0.85),0_0_28px_rgba(0,80,255,0.7)] motion-reduce:transition-none" style={{ opacity: showClock ? 1 : 0, transitionDelay: showClock ? "120ms" : "0ms" }}>
-          {time}
+        {/* back: the clock, like a small digital gauge */}
+        <span aria-hidden={!isLogoFlipped} className="grid place-items-center [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]">
+          <span role="timer" className="whitespace-nowrap rounded-full border border-cyan-400/30 bg-[#05070d] px-5 py-2.5 font-mono text-xs font-semibold tracking-widest text-cyan-300 shadow-[inset_0_0_14px_rgba(0,80,255,0.35),0_0_24px_rgba(0,80,255,0.35)] [text-shadow:0_0_12px_rgba(34,211,238,0.85)] sm:text-sm">
+            {time}
+          </span>
         </span>
       </span>
     </button>
