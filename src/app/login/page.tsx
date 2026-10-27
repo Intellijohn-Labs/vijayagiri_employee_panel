@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AlertTriangle, CircleHelp, Mail, Moon, ShieldAlert, Sun, X } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useTheme } from "@/store/theme-store";
@@ -88,8 +88,24 @@ function NoticeBanner({ notice, onDismiss }: { notice: Notice; onDismiss: () => 
   );
 }
 
+/** The telemetry line that sweeps in above the card while the workspace is being prepared. */
+function UnlockLine() {
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="absolute inset-x-0 bottom-full mb-4" aria-live="polite">
+      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-[#0020B2] dark:text-sky-300">Access Verified • Initializing Workspace</p>
+      <div className="mt-2 h-[2px] overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+        <motion.div initial={{ x: "-100%" }} animate={{ x: "0%" }} transition={{ duration: 0.5, ease: "easeInOut" }} className="h-full w-full bg-gradient-to-r from-transparent via-[#0050FF] to-[#0050FF]" />
+      </div>
+    </motion.div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const reduced = useReducedMotion();
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** Unlock sequence: "check" 0–400 ms, "verify" 400–900 ms, "out" 900–1200 ms. */
+  const [phase, setPhase] = useState<"idle" | "check" | "verify" | "out">("idle");
   const legalName = useSettings((s) => s.settings.profile.legalName);
   const security = useSettings((s) => s.settings.security);
 
@@ -118,14 +134,33 @@ export default function LoginPage() {
     }
   }, []);
 
-  /** Signed in: open the portal straight away. The button keeps its spinner until the next page takes over. */
+  useEffect(() => {
+    const t = timers.current;
+    return () => t.forEach(clearTimeout);
+  }, []);
+
+  /**
+   * Signed in: a 1.2 s unlock. 0–400 ms the button becomes a check mark; 400–900 ms the card settles back under a blue glow while
+   * "Access Verified" sweeps in; at 900 ms the screen fades and zooms forward as the portal opens (the navigation starts then).
+   */
   const enter = (who: Employee) => {
     setStage("launch");
-    // Central admins start on the whole network; someone limited to one showroom lands on that showroom.
-    const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
-    useEmployees.getState().signIn(who);
-    useApp.getState().setBranchScope(scope, { silent: true });
-    router.push("/");
+    const open = () => {
+      // Central admins start on the whole network; someone limited to one showroom lands on that showroom.
+      const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
+      useEmployees.getState().signIn(who);
+      useApp.getState().setBranchScope(scope, { silent: true });
+      router.push("/");
+    };
+    if (reduced) return open();
+    setPhase("check");
+    timers.current.push(
+      setTimeout(() => setPhase("verify"), 400),
+      setTimeout(() => {
+        setPhase("out");
+        open();
+      }, 900),
+    );
   };
 
   const submit = async () => {
@@ -180,23 +215,26 @@ export default function LoginPage() {
   }, [isFlipped]);
 
   return (
-    <div className="grid min-h-[100dvh] lg:grid-cols-2">
+    <motion.div animate={phase === "out" ? { opacity: 0, scale: 1.02 } : { opacity: 1, scale: 1 }} transition={{ duration: 0.3, ease: "easeIn" }} className="grid min-h-[100dvh] lg:grid-cols-2">
       <BrandShowcase />
 
-      <main className="relative flex flex-col bg-white dark:bg-[#0E1219]">
+      <main className="relative flex flex-col overflow-hidden bg-white dark:bg-[#0E1219]">
+        {/* ambient blue glow that fades in while the workspace is prepared */}
+        <motion.div aria-hidden initial={false} animate={{ opacity: phase === "verify" || phase === "out" ? 1 : 0 }} transition={{ duration: 0.5 }} className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,80,255,0.16),transparent_65%)]" />
         <div className="flex justify-end p-4 sm:p-6">
           <Utilities />
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 pb-12 sm:px-10">
-          <div className="w-full max-w-[400px]">
+          <motion.div animate={phase === "verify" || phase === "out" ? { scale: 0.98 } : { scale: 1 }} transition={{ duration: 0.5, ease: "easeInOut" }} className="relative w-full max-w-[400px]">
             {/* on phones and tablets the showcase is hidden, so the logo leads */}
             <div className="mb-10 lg:hidden">
               <BrandLogo />
             </div>
 
             {/* The card: Sign in on the front, Activate your account on the back. */}
-            <div className="[perspective:1000px]">
+            <div className="relative [perspective:1000px]">
+              <AnimatePresence>{(phase === "verify" || phase === "out") && <UnlockLine key="unlock" />}</AnimatePresence>
               <div className={`grid [transform-style:preserve-3d] transition-transform duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${isFlipped ? "[transform:rotateY(180deg)]" : ""}`}>
                 <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="[backface-visibility:hidden] [grid-area:1/1]">
                   <AnimatePresence mode="wait" initial={false}>
@@ -277,9 +315,9 @@ export default function LoginPage() {
               Only employees registered in the directory can sign in.
               <br />© {new Date().getFullYear()} {legalName}
             </p>
-          </div>
+          </motion.div>
         </div>
       </main>
-    </div>
+    </motion.div>
   );
 }

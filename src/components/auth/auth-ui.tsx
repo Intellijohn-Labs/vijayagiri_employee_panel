@@ -102,22 +102,43 @@ export function PasswordField({ label = "Password", autoComplete = "current-pass
 
 /* ───────── Button ───────── */
 
-/** Solid Racing Blue action. A spinner replaces the arrow while the credentials are checked and while the portal opens. */
+/**
+ * Solid Racing Blue action. While the credentials are checked it shows a spinner. Once they are accepted (`stage` is "launch")
+ * it shrinks into a glowing round button with a pulse ring and a checkmark that draws itself.
+ */
 export function SubmitButton({ label, busyLabel = "Signing in…", loading, stage }: { label: string; busyLabel?: string; loading?: boolean; stage: AuthStage }) {
-  const busy = loading || stage === "launch";
+  const done = stage === "launch";
   return (
-    <button type="submit" disabled={busy} className="group flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#0020B2] text-[15px] font-semibold text-white outline-none transition-colors hover:bg-[#0a2fcf] focus-visible:ring-4 focus-visible:ring-[#0020B2]/30 active:bg-[#001a94] disabled:cursor-wait disabled:opacity-90">
-      {busy ? (
-        <>
-          <Loader2 className="h-[18px] w-[18px] animate-spin" />
-          {busyLabel}
-        </>
-      ) : (
-        <>
-          {label}
-          <ArrowRight className="h-[18px] w-[18px] transition-transform duration-150 group-hover:translate-x-0.5" />
-        </>
-      )}
-    </button>
+    <div className="flex justify-center">
+      <button
+        type="submit"
+        disabled={loading || done}
+        aria-label={done ? "Access verified" : undefined}
+        style={{ width: done ? 56 : "100%", borderRadius: done ? 28 : 8 }}
+        className={cn(
+          "group relative flex h-12 items-center justify-center gap-2 bg-[#0020B2] text-[15px] font-semibold text-white outline-none transition-[width,border-radius,box-shadow,background-color] duration-[400ms] ease-out hover:bg-[#0a2fcf] focus-visible:ring-4 focus-visible:ring-[#0020B2]/30 active:bg-[#001a94] disabled:cursor-default",
+          done ? "h-14 !bg-[#0020B2] shadow-[0_0_0_4px_rgba(0,80,255,0.2),0_0_36px_rgba(0,80,255,0.65)]" : loading && "cursor-wait opacity-90",
+        )}
+      >
+        {done ? (
+          <>
+            <motion.span aria-hidden className="absolute inset-0 rounded-full border-2 border-[#0050FF]" initial={{ scale: 1, opacity: 0.8 }} animate={{ scale: 1.9, opacity: 0 }} transition={{ duration: 0.8, repeat: 1, ease: "easeOut" }} />
+            <svg viewBox="0 0 24 24" className="relative h-6 w-6" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3, delay: 0.12, ease: "easeOut" }} />
+            </svg>
+          </>
+        ) : loading ? (
+          <>
+            <Loader2 className="h-[18px] w-[18px] animate-spin" />
+            {busyLabel}
+          </>
+        ) : (
+          <>
+            {label}
+            <ArrowRight className="h-[18px] w-[18px] transition-transform duration-150 group-hover:translate-x-0.5" />
+          </>
+        )}
+      </button>
+    </div>
   );
 }
