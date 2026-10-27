@@ -23,6 +23,11 @@ export interface Branch {
   whatsapp?: string;
   /** Auto follows the hours; Force Open / Force Closed ignore them. Branches without it use `status`. */
   statusOverride?: StatusOverride;
+  email?: string;
+  state?: string;
+  pincode?: string;
+  /** False once an Admin has deactivated the branch; it is then hidden from pickers and lists but still resolves by id. */
+  isActive?: boolean;
 }
 
 export type StatusOverride = "auto" | "open" | "closed";

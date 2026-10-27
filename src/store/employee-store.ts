@@ -208,10 +208,10 @@ export function useIsAdmin(): boolean {
   return isAdmin(useSessionEmployee());
 }
 
-/** Branch ids the signed-in employee may see; null before anyone is signed in (no restriction applied). */
+/** Branch ids the signed-in employee may see; null (no restriction) for "all" access or before anyone is signed in. */
 export function useAccessibleIds(): string[] | null {
   const me = useSessionEmployee();
-  return useMemo(() => (me ? (me.access === "all" ? BASE_BRANCHES.map((b) => b.id) : me.access) : null), [me]);
+  return useMemo(() => (me && me.access !== "all" ? me.access : null), [me]);
 }
 
 export const idsFor = (e: Pick<Employee, "access">) => (e.access === "all" ? BASE_BRANCHES.map((b) => b.id) : e.access);

@@ -55,7 +55,7 @@ export const useApp = create<AppState>((set, get) => ({
     const branch = read<string>(LS.branch);
     set({
       sidebarCollapsed: !!read<boolean>(LS.sidebar),
-      branchScope: branch && BASE_BRANCHES.some((b) => b.id === branch) ? branch : "all",
+      branchScope: branch || "all",
       now: Date.now(),
     });
   },

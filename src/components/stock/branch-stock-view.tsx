@@ -139,9 +139,9 @@ function ModelCard({ group, colourQuery }: { group: ModelGroup; colourQuery: str
 
 /** Dedicated model-wise stock view for one showroom. */
 export function BranchStockView({ branchId }: { branchId: string }) {
-  const b = useBranch(branchId)!;
+  const b = useBranch(branchId);
   const me = useSessionEmployee();
-  const hq = b.kind === "hq";
+  const hq = b?.kind === "hq";
   const hydrated = useStock((s) => s.hydrated);
   const all = useStock((s) => s.entries);
   const mine = useMemo(() => all.filter((e) => e.branchId === branchId), [all, branchId]);
@@ -156,6 +156,8 @@ export function BranchStockView({ branchId }: { branchId: string }) {
 
   const countOf = (c: Scope) => groups.filter((g) => c === "all" || g.category === c).reduce((n, g) => n + g.units.length, 0);
   const summary = statusLine(mine);
+
+  if (!b) return <div className="h-64 animate-pulse rounded-xl bg-hover" aria-busy />;
 
   if (me && !canAccess(me, branchId)) {
     return (

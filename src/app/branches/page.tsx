@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Building2, Clock, Copy, MapPin, MessageCircle, Navigation, Pencil, Phone, PhoneOff, Store, UserRound } from "lucide-react";
+import { Building2, Clock, Copy, MapPin, MessageCircle, Navigation, Pencil, Phone, PhoneOff, Plus, Store, UserRound } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useStock } from "@/store/stock-store";
 import { STATUS_SHORT } from "@/lib/stock-options";
@@ -10,10 +10,11 @@ import { StockThumb } from "@/components/stock/stock-thumb";
 import { toast } from "@/store/toast-store";
 import { branchLabel } from "@/lib/branches";
 import type { Branch } from "@/lib/branches";
-import { useBranch, useBranchTools } from "@/store/branch-store";
+import { useBranch, useBranchStore, useBranchTools } from "@/store/branch-store";
 import { intlDigits, useIsAdmin } from "@/store/employee-store";
 import { isOpenNow, useSettings } from "@/store/settings-store";
 import { EditBranchDrawer } from "@/components/branches/edit-branch-drawer";
+import { AddBranchDrawer } from "@/components/branches/add-branch-drawer";
 import { cn } from "@/lib/utils";
 import { fadeUp, spring, stagger } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
@@ -55,12 +56,39 @@ function DirectionsLink({ branch }: { branch: Branch }) {
   );
 }
 
+/** Admin-only switch that deactivates a showroom (hidden from pickers and lists) or brings it back. */
+function ActiveToggle({ branch }: { branch: Branch }) {
+  const toggleActive = useBranchStore((s) => s.toggleActive);
+  const [busy, setBusy] = useState(false);
+  const active = branch.isActive !== false;
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={active}
+      aria-label={`${active ? "Deactivate" : "Activate"} ${branch.name}`}
+      title={active ? "Active — click to deactivate" : "Inactive — click to activate"}
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        const error = await toggleActive(branch.id);
+        setBusy(false);
+        if (error) toast.error("Couldn't update the showroom", error);
+        else toast.success(active ? "Showroom deactivated" : "Showroom activated", branch.name);
+      }}
+      className={cn("relative h-5 w-9 shrink-0 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50", active ? "bg-emerald-500" : "bg-slate-400/60")}
+    >
+      <span className={cn("absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform", active && "translate-x-4")} />
+    </button>
+  );
+}
+
 function BranchCard({ branch, canEdit, onDetails, onEdit }: { branch: Branch; /** Admins only — everyone else gets the view-only card */ canEdit: boolean; onDetails: () => void; onEdit: () => void }) {
   const hq = branch.kind === "hq";
   const Icon = hq ? Building2 : Store;
   return (
     <motion.div variants={fadeUp} whileHover={{ y: -3 }} transition={spring} className="h-full">
-      <Card className={cn("flex h-full flex-col overflow-hidden transition-[border-color,box-shadow] duration-200 hover:border-accent/40 hover:shadow-lg hover:shadow-accent/10", hq && "border-accent/30")}>
+      <Card className={cn("flex h-full flex-col overflow-hidden transition-[border-color,box-shadow] duration-200 hover:border-accent/40 hover:shadow-lg hover:shadow-accent/10", hq && "border-accent/30", branch.isActive === false && "opacity-60")}>
         {hq && <div className="hairline-top h-px w-full" />}
         <div className="flex items-start gap-3 px-5 pt-5">
           <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl border", hq ? "border-accent/30 bg-tint text-accent-text" : "border-line bg-canvas text-muted")}>
@@ -115,6 +143,7 @@ function BranchCard({ branch, canEdit, onDetails, onEdit }: { branch: Branch; /*
               Edit Details
             </Button>
           )}
+          {canEdit && <ActiveToggle branch={branch} />}
           <span className="ml-auto flex items-center gap-0.5">
             <CallLink branch={branch} />
             <DirectionsLink branch={branch} />
@@ -263,9 +292,12 @@ export default function BranchesPage() {
   const [lastEditId, setLastEditId] = useState<string | null>(null);
   const lastDetails = useBranch(lastDetailsId) ?? null;
   const isAdmin = useIsAdmin();
+  const loading = useBranchStore((s) => s.loading);
+  const [adding, setAdding] = useState(false);
 
   const selected = branchById(scope);
-  const shown = selected ? [selected] : BRANCHES;
+  // Admins also see deactivated showrooms here (dimmed) so they can switch them back on.
+  const shown = selected ? [selected] : isAdmin ? allBranches : BRANCHES;
   const startEdit = (id: string) => {
     if (!isAdmin) return void toast.error("Unauthorized: Only Admins can modify branch details.");
     setDetailsId(null);
@@ -279,6 +311,12 @@ export default function BranchesPage() {
         title="Branches"
         description={selected ? `Showing ${branchLabel(selected)}.` : BRANCHES.length < allBranches.length ? `${BRANCHES.length} showroom${BRANCHES.length === 1 ? "" : "s"} you can access.` : `Head Office and ${BRANCHES.length - 1} sub-branches across Ernakulam.`}
         actions={
+          <>
+            {isAdmin && (
+              <Button variant="primary" leading={<Plus className="h-3.5 w-3.5" />} onClick={() => setAdding(true)}>
+                Add Showroom
+              </Button>
+            )}
           <AnimatePresence>
             {selected && (
               <motion.div initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
@@ -286,8 +324,10 @@ export default function BranchesPage() {
               </motion.div>
             )}
           </AnimatePresence>
+          </>
         }
       />
+      {loading && <div className="mb-3 h-1 animate-pulse rounded bg-hover" aria-busy />}
 
       <motion.div key={scope} variants={stagger(0.07)} initial="hidden" animate="show" className={cn("grid gap-4", selected ? "max-w-xl" : "lg:grid-cols-2 2xl:grid-cols-3")}>
         {shown.map((b) => (
@@ -305,6 +345,7 @@ export default function BranchesPage() {
       </motion.div>
 
       <BranchDrawer branch={lastDetails} canEdit={isAdmin} open={detailsId !== null} onClose={() => setDetailsId(null)} onEdit={() => lastDetails && startEdit(lastDetails.id)} />
+      {isAdmin && <AddBranchDrawer open={adding} onClose={() => setAdding(false)} />}
       {isAdmin && <EditBranchDrawer branchId={lastEditId} open={editId !== null} onClose={() => setEditId(null)} />}
     </>
   );

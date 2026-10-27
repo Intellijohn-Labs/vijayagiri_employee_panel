@@ -20,7 +20,7 @@ const KIND_OPTIONS: { value: Kind; label: string }[] = [
   { value: "branch", label: "Sub-Branch" },
 ];
 
-function Form({ id, onClose }: { id: string; onClose: () => void }) {
+function Form({ id, onClose, onBusy }: { id: string; onClose: () => void; onBusy: (busy: boolean) => void }) {
   const current = useBranch(id)!;
   const save = useBranchStore((s) => s.save);
   const reset = useBranchStore((s) => s.reset);
@@ -37,14 +37,18 @@ function Form({ id, onClose }: { id: string; onClose: () => void }) {
     hours: current.hours,
     override: overrideOf(current),
     role: current.role ?? "",
+    email: current.email ?? "",
+    state: current.state ?? "Kerala",
+    pincode: current.pincode ?? "",
   });
+  const saveRemote = useBranchStore((s) => s.saveRemote);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => {
     setF((p) => ({ ...p, [k]: v }));
     setErrors((e) => ({ ...e, [k]: "" }));
   };
 
-  const submit = () => {
+  const submit = async () => {
     const e: Record<string, string> = {};
     if (f.name.trim().length < 2) e.name = "Enter the branch name";
     if (!f.city.trim()) e.city = "Enter a city or area tag";
@@ -52,6 +56,8 @@ function Form({ id, onClose }: { id: string; onClose: () => void }) {
     if (!f.phone.trim()) e.phone = "Enter at least one contact number";
     if (!f.manager.trim()) e.manager = "Enter the person in charge";
     if (!f.hours.trim()) e.hours = "Enter the operating hours";
+    if (f.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) e.email = "Enter a valid email address";
+    if (f.pincode.trim() && !/^\d{6}$/.test(f.pincode.trim())) e.pincode = "Pincode is 6 digits";
     setErrors(e);
     if (Object.keys(e).length) return;
 
@@ -74,13 +80,19 @@ function Form({ id, onClose }: { id: string; onClose: () => void }) {
     // Hours unchanged and never customised for this branch: leave them following the dealership default in Settings.
     const keepDefaultHours = patch.hours === current.hours && !ownHours;
     const changed = (Object.keys(patch) as (keyof typeof patch)[]).some((k) => (k === "statusOverride" ? patch.statusOverride !== overrideOf(current) : k === "status" ? false : patch[k] !== current[k]) && !(k === "role" && !patch.role && !current.role));
-    if (!changed) {
+    const changedExtra = f.email.trim() !== (current.email ?? "") || f.state.trim() !== (current.state ?? "Kerala") || f.pincode.trim() !== (current.pincode ?? "");
+    if (!changed && !changedExtra) {
       toast.info("No changes to save");
       onClose();
       return;
     }
     const { hours: _hours, ...rest } = patch;
     void _hours;
+    onBusy(true);
+    // The database owns the contact details; hours, status and badge stay in this browser's edits.
+    const error = await saveRemote(id, { name: patch.name, city: patch.city, address: patch.address, phone: patch.phone, managerName: patch.manager, email: f.email, state: f.state, pincode: f.pincode });
+    onBusy(false);
+    if (error) return void toast.error("Couldn't save the branch", error);
     if (!save(id, keepDefaultHours ? rest : patch)) return onClose();
     toast.success("Branch details updated successfully", `${branchLabel({ ...current, ...patch } as Branch)} now shows the new details everywhere.`);
     onClose();
@@ -141,6 +153,16 @@ function Form({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
       </div>
 
+      <Field label="Email" error={errors.email} hint="Optional">
+        <Input type="email" value={f.email} invalid={!!errors.email} onChange={(e) => set("email", e.target.value)} placeholder="e.g. perumbavoor@vijayagiri.com" />
+      </Field>
+      <Field label="State">
+        <Input value={f.state} onChange={(e) => set("state", e.target.value)} placeholder="Kerala" />
+      </Field>
+      <Field label="Pincode" error={errors.pincode} hint="Optional">
+        <Input value={f.pincode} invalid={!!errors.pincode} onChange={(e) => set("pincode", e.target.value)} inputMode="numeric" maxLength={6} placeholder="e.g. 683542" />
+      </Field>
+
       <div className="sm:col-span-2">
         <Field label="Role tag / description" hint="Optional">
           <Input value={f.role} onChange={(e) => set("role", e.target.value)} placeholder="e.g. Central Stock Distribution & Headquarters" />
@@ -169,6 +191,7 @@ function Form({ id, onClose }: { id: string; onClose: () => void }) {
 export function EditBranchDrawer({ branchId, open, onClose }: { branchId: string | null; open: boolean; onClose: () => void }) {
   const b = useBranch(branchId);
   const admin = useIsAdmin();
+  const [busy, setBusy] = useState(false);
   if (!b || !admin) return null;
   return (
     <Drawer
@@ -179,16 +202,16 @@ export function EditBranchDrawer({ branchId, open, onClose }: { branchId: string
       description={branchLabel(b)}
       footer={
         <div className="flex items-center justify-end gap-2">
-          <Button type="button" onClick={onClose}>
+          <Button type="button" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" form="edit-branch-form" variant="primary" className="bg-[#003399] text-white hover:bg-[#0047AB]">
+          <Button type="submit" form="edit-branch-form" variant="primary" loading={busy} className="bg-[#003399] text-white hover:bg-[#0047AB]">
             Save Changes
           </Button>
         </div>
       }
     >
-      <Form key={b.id} id={b.id} onClose={onClose} />
+      <Form key={b.id} id={b.id} onClose={onClose} onBusy={setBusy} />
     </Drawer>
   );
 }

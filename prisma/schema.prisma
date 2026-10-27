@@ -76,3 +76,19 @@ model StageHistory {
 
   @@index([claimId, stageNumber])
 }
+
+model Branch {
+  id          String   @id @default(cuid())
+  name        String // e.g. "Vijayagiri Yamaha - Perumbavoor"
+  code        String   @unique // e.g. "perumbavoor", "hq", "kothamangalam"
+  phone       String?
+  email       String?
+  address     String?
+  city        String?
+  state       String?  @default("Kerala")
+  pincode     String?
+  managerName String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
