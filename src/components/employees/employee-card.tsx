@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Mail, Pencil, Phone, Power, Trash2 } from "lucide-react";
+import { Mail, Pencil, Phone, Power } from "lucide-react";
 import { useAllBranches } from "@/store/branch-store";
 import { intlDigits, type Employee } from "@/store/employee-store";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ const LOGO_MASK = "url(/images/vijayagiri-logo.png)";
 const maskStyle = { WebkitMaskImage: LOGO_MASK, maskImage: LOGO_MASK, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "left center", maskPosition: "left center" } as const;
 
 /** A vertical corporate smart-badge for one employee. */
-export function EmployeeCard({ employee: e, isYou, onEdit, onToggle, onRemove }: { employee: Employee; isYou: boolean; onEdit: () => void; onToggle: () => void; onRemove: () => void }) {
+export function EmployeeCard({ employee: e, isYou, onEdit, onToggle }: { employee: Employee; isYou: boolean; onEdit: () => void; onToggle: () => void }) {
   const branches = useAllBranches();
   const active = e.status === "Active";
   const waDigits = intlDigits(e.whatsapp || e.phone);
@@ -60,7 +60,7 @@ export function EmployeeCard({ employee: e, isYou, onEdit, onToggle, onRemove }:
             <Badge tone="accent">{e.role}</Badge>
             {isYou && <Badge tone="info">You</Badge>}
             {!active && <Badge>Inactive</Badge>}
-            {active && !e.passwordHash && <Badge tone="warn">Awaiting activation</Badge>}
+            {active && !e.activated && <Badge tone="warn">Awaiting activation</Badge>}
           </div>
           <p className="mt-2.5 inline-block rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[11.5px] font-medium tracking-wider text-muted">ID: {e.code}</p>
         </div>
@@ -113,9 +113,6 @@ export function EmployeeCard({ employee: e, isYou, onEdit, onToggle, onRemove }:
           </Button>
           <Button size="sm" variant="ghost" leading={<Power className="h-3.5 w-3.5" />} onClick={onToggle} disabled={isYou} title={isYou ? "You can't deactivate your own account" : undefined}>
             {active ? "Deactivate" : "Activate"}
-          </Button>
-          <Button size="sm" variant="ghost" iconOnly className="ml-auto text-danger hover:!bg-danger-tint hover:!text-danger" aria-label={`Remove ${e.name}`} onClick={onRemove} disabled={isYou} title={isYou ? "You can't remove your own account" : "Remove employee"}>
-            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>

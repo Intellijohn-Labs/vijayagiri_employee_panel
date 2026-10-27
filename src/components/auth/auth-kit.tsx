@@ -2,9 +2,6 @@
 
 import { toast } from "@/store/toast-store";
 
-/* ───────── Demo password (there is no real authentication behind the email check) ───────── */
-
-export const DEMO_PASSWORD = "demo@1234";
 
 /* ───────── Remember me ───────── */
 
@@ -26,7 +23,7 @@ export function saveRemembered(email: string | null) {
 }
 
 export function forgotPassword(email: string) {
-  toast.info("Password reset requested", `${email.trim() ? `If ${email.trim()} has an account, a` : "A"} reset link is sent by Central Admin (Head Office, 9961774455). This demo sends no email.`);
+  toast.info("Password reset requested", `${email.trim() ? `If ${email.trim()} has an account, a` : "A"} reset link is sent by Central Admin (Head Office, 9961774455).`);
 }
 
 /* ───────── Watermark mask ───────── */

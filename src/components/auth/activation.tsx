@@ -27,9 +27,12 @@ export function ActivationFlow({ stage, initialEmail, onBack, onType, onActivate
   const [working, setWorking] = useState(false);
   const security = useSettings((s) => s.settings.security);
 
-  const verify = () => {
+  const verify = async () => {
     if (!email.trim()) return setErrors({ email: "Enter the work email your Admin registered for you" });
-    const check = checkInvite(email);
+    setWorking(true);
+    const check = await checkInvite(email).catch(() => null);
+    setWorking(false);
+    if (!check) return setErrors({ email: "Couldn't reach the server. Please try again." });
     if (!check.ok) return setErrors({ email: ACTIVATION_DENIED[check.reason] });
     setErrors({});
     setPassword("");
@@ -47,11 +50,11 @@ export function ActivationFlow({ stage, initialEmail, onBack, onType, onActivate
     if (Object.keys(e).length) return;
     setWorking(true);
     try {
-      const done = await activateAccount(invited.id, password);
+      const done = await activateAccount(email, password);
       if (!done) {
         // Someone (or another tab) activated or deactivated the account since the email was verified.
         setInvited(null);
-        const again = checkInvite(email);
+        const again = await checkInvite(email);
         setErrors({ email: again.ok ? "Something went wrong. Please verify your email again." : ACTIVATION_DENIED[again.reason] });
         return;
       }
@@ -70,7 +73,7 @@ export function ActivationFlow({ stage, initialEmail, onBack, onType, onActivate
     <motion.div {...step} className="mt-5">
       <AnimatePresence mode="wait" initial={false}>
         {!invited ? (
-          <motion.form key="verify" {...step} noValidate onSubmit={(ev) => { ev.preventDefault(); verify(); }} className="space-y-4">
+          <motion.form key="verify" {...step} noValidate onSubmit={(ev) => { ev.preventDefault(); void verify(); }} className="space-y-4">
             <div>
               <p className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-white">Activate your account</p>
               <p className="mt-1 text-[12.5px] leading-5 text-slate-600 dark:text-slate-400">Enter the work email your Admin added to the employee directory. Only pre-approved employees can set a password.</p>

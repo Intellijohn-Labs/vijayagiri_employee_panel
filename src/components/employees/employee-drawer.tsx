@@ -30,7 +30,7 @@ const rowKey = (toggle: () => void) => (e: KeyboardEvent<HTMLElement>) => {
   toggle();
 };
 
-function Form({ employee, presetBranch, onClose }: { employee: Employee | null; presetBranch?: string; onClose: () => void }) {
+function Form({ employee, presetBranch, onClose, onBusy }: { employee: Employee | null; presetBranch?: string; onClose: () => void; onBusy: (busy: boolean) => void }) {
   const branches = useAllBranches();
   const employees = useEmployees((s) => s.employees);
   const add = useEmployees((s) => s.add);
@@ -80,7 +80,7 @@ function Form({ employee, presetBranch, onClose }: { employee: Employee | null; 
   const waDigits = intlDigits(f.whatsapp);
   const toggleBranch = (id: string) => set("ids", f.ids.includes(id) ? f.ids.filter((x) => x !== id) : [...f.ids, id]);
 
-  const submit = () => {
+  const submit = async () => {
     const e: Record<string, string> = {};
     if (f.name.trim().length < 2) e.name = "Enter the employee's full name";
     if (!EMAIL.test(f.email.trim())) e.email = "Enter a valid official email address";
@@ -109,8 +109,10 @@ function Form({ employee, presetBranch, onClose }: { employee: Employee | null; 
       photo: f.photo,
       code: f.code.trim().toUpperCase(),
     };
-    if (editing) update(employee.id, data);
-    else add(data);
+    onBusy(true);
+    const error = await (editing ? update(employee.id, data) : add(data));
+    onBusy(false);
+    if (error) return void toast.error(editing ? "Couldn't update the employee" : "Couldn't add the employee", error);
     toast.success(editing ? "Employee details updated" : "Employee added", editing ? `${data.name}'s card has been updated.` : `${data.name} can now activate their account with ${data.email} from the sign-in screen.`);
     onClose();
   };
@@ -121,7 +123,7 @@ function Form({ employee, presetBranch, onClose }: { employee: Employee | null; 
       noValidate
       onSubmit={(ev) => {
         ev.preventDefault();
-        submit();
+        void submit();
       }}
       className="grid gap-4 px-5 py-5 sm:grid-cols-2"
     >
@@ -241,6 +243,7 @@ function Form({ employee, presetBranch, onClose }: { employee: Employee | null; 
 
 /** Slide-over for adding a new employee (employee = null) or editing one. Cancel discards unsaved changes. */
 export function EmployeeDrawer({ employee, presetBranch, open, onClose }: { employee: Employee | null; /** Showroom ticked by default when adding (not editing) */ presetBranch?: string; open: boolean; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
   return (
     <Drawer
       open={open}
@@ -250,16 +253,16 @@ export function EmployeeDrawer({ employee, presetBranch, open, onClose }: { empl
       description={employee ? employee.name : "New staff can sign in with the official email you register here."}
       footer={
         <div className="flex items-center justify-end gap-2">
-          <Button type="button" onClick={onClose}>
+          <Button type="button" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" form="employee-form" variant="primary" className="bg-[#003399] text-white hover:bg-[#0047AB]">
+          <Button type="submit" form="employee-form" variant="primary" loading={busy} className="bg-[#003399] text-white hover:bg-[#0047AB]">
             {employee ? "Save Changes" : "Add Employee"}
           </Button>
         </div>
       }
     >
-      <Form employee={employee} presetBranch={presetBranch} onClose={onClose} />
+      <Form employee={employee} presetBranch={presetBranch} onClose={onClose} onBusy={setBusy} />
     </Drawer>
   );
 }

@@ -3,134 +3,99 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { BASE_BRANCHES } from "@/lib/branches";
+import { EMPLOYEE_ROLES, type Employee, type EmployeeInput, type EmployeeRole, type EmployeeStatus } from "@/lib/employees";
+import { activateAccountAction, checkInviteAction, createEmployee, getEmployees, getSession, signInAction, signOutAction, toggleEmployeeStatus, updateEmployee, type ActivationCheck, type AuthResult } from "@/actions/employees";
 
-export const EMPLOYEE_ROLES = ["Admin", "Showroom Manager", "Sales Executive", "Inventory Officer"] as const;
-export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
-export type EmployeeStatus = "Active" | "Inactive";
+export { EMPLOYEE_ROLES };
+export type { Employee, EmployeeInput, EmployeeRole, EmployeeStatus };
 
-export interface Employee {
-  id: string;
-  /** Employee ID / code, e.g. VAA-EMP-004 */
-  code: string;
-  name: string;
-  /** Official email — unique, and the only identifier the web app accepts at sign-in */
-  email: string;
-  phone: string;
-  whatsapp: string;
-  role: EmployeeRole;
-  /** "all" = every showroom (central admin access), otherwise the branch ids this person may see */
-  access: "all" | string[];
-  status: EmployeeStatus;
-  /** SHA-256 of the password the employee chose at activation. Absent until then: the Admin has invited them, but they can't sign in yet. */
-  passwordHash?: string;
-  /** Profile photo as a small data URL */
-  photo?: string;
-  createdAt: number;
-}
-
-let syncing = false;
-const EMP_KEY = "vg.employees";
-const SESSION_KEY = "vg.session";
-
-/** SHA-256 of `${id}:demo@1234` — the demo accounts' password. Divya is left un-activated so the invite flow can be tried. */
-const SEED_HASH_1 = "08149c18ff0019caa45d660a62ce3f3a721aabd22bc35fcb217cb2aed493fdb8";
-const SEED_HASH_2 = "c8c09a731aefadabc77f96e3faf4f7dd9e77894305055cf42e9a17c45901d409";
-const SEED_HASH_4 = "46d080f8b7eb173e7418608033e290facab3d1e0554e637dae4f1990ed81149d";
-
-/** The directory starts with a few people so the app can be signed into on day one. Edit or remove them in Employees. */
-const SEED: Employee[] = [
-  { id: "emp-1", code: "VAA-EMP-001", name: "Venkatesh Rao", email: "venkatesh@vijayagiri.in", phone: "+91 98470 10001", whatsapp: "+91 98470 10001", role: "Admin", access: "all", status: "Active", passwordHash: SEED_HASH_1, createdAt: 1 },
-  { id: "emp-2", code: "VAA-EMP-002", name: "Anil Gowda", email: "anil@vijayagiri.in", phone: "+91 98470 10002", whatsapp: "+91 98470 10002", role: "Showroom Manager", access: ["perumbavoor"], status: "Active", passwordHash: SEED_HASH_2, createdAt: 2 },
-  { id: "emp-3", code: "VAA-EMP-003", name: "Divya Kamath", email: "divya@vijayagiri.in", phone: "+91 98470 10003", whatsapp: "+91 98470 10003", role: "Sales Executive", access: ["kothamangalam"], status: "Active", createdAt: 3 },
-  { id: "emp-4", code: "VAA-EMP-004", name: "Meera Shetty", email: "meera@vijayagiri.in", phone: "+91 98470 10004", whatsapp: "+91 98470 10004", role: "Inventory Officer", access: ["hq", "angamaly"], status: "Active", passwordHash: SEED_HASH_4, createdAt: 4 },
-];
+/** Employees used to live in this browser; these keys are only here to clear what an earlier version left behind. */
+const LEGACY_KEYS = ["vg.employees", "vg.session"];
 
 interface EmployeeState {
+  /** Everyone, for an Admin; just the signed-in employee otherwise. Always read from PostgreSQL. */
   employees: Employee[];
-  /** Id of the signed-in employee, or null */
+  /** Id of the signed-in employee (from the server's session cookie), or null */
   sessionId: string | null;
-  /** True once the saved directory and session have been read from the browser */
+  /** True once the server has said whether anyone is signed in */
   ready: boolean;
   hydrate: () => void;
-  add: (e: Omit<Employee, "id" | "createdAt">) => Employee;
-  update: (id: string, patch: Partial<Omit<Employee, "id" | "createdAt">>) => void;
-  remove: (id: string) => Employee | undefined;
-  restore: (e: Employee) => void;
-  signIn: (id: string) => void;
+  /** Re-reads the session and the directory from the server. */
+  load: () => Promise<void>;
+  /** Each returns the error message to show, or null on success. */
+  add: (input: EmployeeInput) => Promise<string | null>;
+  update: (id: string, input: EmployeeInput) => Promise<string | null>;
+  toggle: (id: string) => Promise<string | null>;
+  /** Called once the server has started a session (sign-in or activation). */
+  signIn: (employee: Employee) => void;
   signOut: () => void;
 }
 
-const write = (key: string, value: unknown) => {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* storage unavailable — holds for this session only */
-  }
-};
+let listening = false;
 
-export const useEmployees = create<EmployeeState>((set, get) => ({
-  employees: SEED,
-  sessionId: null,
-  ready: false,
-  hydrate: () => {
-    let employees = SEED;
-    let sessionId: string | null = null;
-    try {
-      const raw = localStorage.getItem(EMP_KEY);
-      // Directories saved before passwords existed: give the demo accounts their password back; anyone else activates via the invite flow.
-      if (raw) employees = (JSON.parse(raw) as Employee[]).map((e) => ({ ...e, passwordHash: e.passwordHash ?? SEED.find((x) => x.id === e.id)?.passwordHash }));
-      sessionId = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as string | null;
-    } catch {
-      /* unreadable — fall back to the seed */
-    }
-    set({ employees, sessionId, ready: true });
-    // Signing out (or in) in another tab of this browser applies here too — this is also how "force logout" reaches every open tab.
-    if (!syncing) {
-      syncing = true;
-      window.addEventListener("storage", (e) => {
-        if (e.key === SESSION_KEY) set({ sessionId: e.newValue ? (JSON.parse(e.newValue) as string | null) : null });
-      });
-    }
-  },
-  add: (e) => {
-    const employee: Employee = { ...e, id: `emp-${Date.now().toString(36)}`, createdAt: Date.now() };
-    const employees = [...get().employees, employee];
-    set({ employees });
-    write(EMP_KEY, employees);
-    return employee;
-  },
-  update: (id, patch) => {
-    const employees = get().employees.map((e) => (e.id === id ? { ...e, ...patch } : e));
-    set({ employees });
-    write(EMP_KEY, employees);
-  },
-  remove: (id) => {
-    const gone = get().employees.find((e) => e.id === id);
-    if (!gone) return undefined;
-    const employees = get().employees.filter((e) => e.id !== id);
-    set({ employees });
-    write(EMP_KEY, employees);
-    return gone;
-  },
-  restore: (e) => {
-    const employees = [...get().employees, e].sort((a, z) => a.createdAt - z.createdAt);
-    set({ employees });
-    write(EMP_KEY, employees);
-  },
-  signIn: (id) => {
-    set({ sessionId: id });
-    write(SESSION_KEY, id);
-  },
-  signOut: () => {
-    set({ sessionId: null });
-    write(SESSION_KEY, null);
-  },
-}));
+export const useEmployees = create<EmployeeState>((set, get) => {
+  const put = (e: Employee) => set({ employees: get().employees.some((x) => x.id === e.id) ? get().employees.map((x) => (x.id === e.id ? e : x)) : [...get().employees, e] });
+  const unreachable = "Could not reach the server. Please try again.";
+
+  return {
+    employees: [],
+    sessionId: null,
+    ready: false,
+    hydrate: () => {
+      try {
+        for (const k of LEGACY_KEYS) localStorage.removeItem(k);
+      } catch {
+        /* storage unavailable */
+      }
+      void get().load();
+      // Coming back to the tab re-checks the session, so deactivating someone (or signing out elsewhere) reaches every open tab.
+      if (!listening) {
+        listening = true;
+        window.addEventListener("focus", () => void get().load());
+      }
+    },
+    load: async () => {
+      try {
+        const me = await getSession();
+        set({ sessionId: me?.id ?? null, employees: me ? await getEmployees() : [], ready: true });
+      } catch {
+        // Server unreachable: keep whatever is on screen rather than signing everyone out.
+        set({ ready: true });
+      }
+    },
+    add: async (input) => {
+      const res = await createEmployee(input).catch(() => null);
+      if (!res) return unreachable;
+      if (!res.ok) return res.error;
+      put(res.employee);
+      return null;
+    },
+    update: async (id, input) => {
+      const res = await updateEmployee(id, input).catch(() => null);
+      if (!res) return unreachable;
+      if (!res.ok) return res.error;
+      put(res.employee);
+      return null;
+    },
+    toggle: async (id) => {
+      const res = await toggleEmployeeStatus(id).catch(() => null);
+      if (!res) return unreachable;
+      if (!res.ok) return res.error;
+      put(res.employee);
+      return null;
+    },
+    signIn: (employee) => {
+      set({ sessionId: employee.id, employees: get().employees.some((e) => e.id === employee.id) ? get().employees : [employee] });
+      void get().load();
+    },
+    signOut: () => {
+      set({ sessionId: null, employees: [] });
+      void signOutAction().catch(() => undefined);
+    },
+  };
+});
 
 const norm = (s: string) => s.trim().toLowerCase();
-
-const findByEmail = (email: string) => useEmployees.getState().employees.find((e) => norm(e.email) === norm(email));
 
 /** Salted SHA-256, hex. Needs the Web Crypto API, which browsers only expose on https or localhost. */
 export async function hashPassword(employeeId: string, password: string): Promise<string> {
@@ -139,40 +104,22 @@ export async function hashPassword(employeeId: string, password: string): Promis
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** The only way in: the email (or employee ID) must belong to someone in the directory who is Active, has activated their account, and knows the password. */
-export type AuthResult = { ok: true; employee: Employee } | { ok: false; reason: "not-found" | "inactive" | "not-activated" | "wrong-password" };
-export async function authenticate(identifier: string, password: string): Promise<AuthResult> {
-  const employee = useEmployees.getState().employees.find((e) => norm(e.email) === norm(identifier) || norm(e.code) === norm(identifier));
-  if (!employee) return { ok: false, reason: "not-found" };
-  if (employee.status !== "Active") return { ok: false, reason: "inactive" };
-  if (!employee.passwordHash) return { ok: false, reason: "not-activated" };
-  if ((await hashPassword(employee.id, password)) !== employee.passwordHash) return { ok: false, reason: "wrong-password" };
-  return { ok: true, employee };
-}
+/** The only way in: the email (or employee ID) must belong to someone in the directory who is Active, has activated their account, and knows the password. Checked on the server, which also starts the session. */
+export type { AuthResult, ActivationCheck };
+export const authenticate = (identifier: string, password: string): Promise<AuthResult> => signInAction(identifier, password);
 
 /** Step 1 of account activation: only an email an Admin already added to the directory may continue. */
-export type ActivationCheck = { ok: true; employee: Employee } | { ok: false; reason: "not-found" | "inactive" | "already-active" };
-export function checkInvite(email: string): ActivationCheck {
-  const employee = findByEmail(email);
-  if (!employee) return { ok: false, reason: "not-found" };
-  if (employee.status !== "Active") return { ok: false, reason: "inactive" };
-  if (employee.passwordHash) return { ok: false, reason: "already-active" };
-  return { ok: true, employee };
-}
+export const checkInvite = (email: string): Promise<ActivationCheck> => checkInviteAction(email);
 
-/** Step 2: store the chosen password against the invited employee. Re-checks the invite so a stale screen can't overwrite an active account. */
-export async function activateAccount(employeeId: string, password: string): Promise<Employee | null> {
-  const current = useEmployees.getState().employees.find((e) => e.id === employeeId);
-  if (!current || current.status !== "Active" || current.passwordHash) return null;
-  useEmployees.getState().update(employeeId, { passwordHash: await hashPassword(employeeId, password) });
-  return useEmployees.getState().employees.find((e) => e.id === employeeId) ?? null;
-}
+/** Step 2: store the chosen password against the invited employee and sign them in; null if the invite is no longer valid. */
+export const activateAccount = (email: string, password: string): Promise<Employee | null> => activateAccountAction(email, password);
 
 export const ACCESS_DENIED = {
   "not-found": "Access Denied: This email is not registered in the Vijayagiri Employee Directory. Contact Admin.",
   inactive: "Access Denied: This employee account is inactive. Contact Admin.",
   "not-activated": "This account hasn't been activated yet. Choose “New employee? Activate your account” to set your password.",
   "wrong-password": "Incorrect password. Try again, or use “Forgot password?”.",
+  locked: "Too many failed attempts. Please wait 15 minutes and try again.",
 } as const;
 
 /** Shown on the activation screen — worded for someone who may have mistyped the address. */

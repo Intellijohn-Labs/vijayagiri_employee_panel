@@ -114,4 +114,34 @@ model Branch {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  employees Employee[]
+}
+
+/// Portal staff. Sign-in, the /employees page and access control all read this table.
+model Employee {
+  id          String   @id @default(cuid())
+  /// Employee ID shown on cards, e.g. VAA-EMP-004
+  code        String   @unique
+  name        String
+  email       String?  @unique
+  phone       String   @unique
+  whatsapp    String?
+  /// Admin, Showroom Manager, Sales Executive or Inventory Officer
+  role        String   @default("Sales Executive")
+  designation String?
+  /// Primary showroom (Branch.id); the portal itself refers to showrooms by Branch.code
+  branchId    String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  /// True for central staff who may see every showroom
+  allBranches Boolean  @default(false)
+  /// Branch codes this person may see when `allBranches` is false
+  branchCodes String[] @default([])
+  /// scrypt hash ("scrypt$salt$hash"). Null until the employee activates their account from the sign-in screen.
+  password    String?
+  /// Profile photo as a small data URL
+  photo       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

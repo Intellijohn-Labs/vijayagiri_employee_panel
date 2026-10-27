@@ -29,9 +29,7 @@ const ROLE_TABS: { value: RoleFilter; label: string }[] = [
 export default function EmployeesPage() {
   const me = useSessionEmployee();
   const employees = useEmployees((s) => s.employees);
-  const update = useEmployees((s) => s.update);
-  const remove = useEmployees((s) => s.remove);
-  const restore = useEmployees((s) => s.restore);
+  const toggleStatus = useEmployees((s) => s.toggle);
 
   const [q, setQ] = useState("");
   const [role, setRole] = useState<RoleFilter>("all");
@@ -61,18 +59,12 @@ export default function EmployeesPage() {
   }, [inShowroom, q, role, status]);
   const counts = useMemo(() => ({ active: employees.filter((e) => e.status === "Active").length, inactive: employees.filter((e) => e.status === "Inactive").length }), [employees]);
 
-  const activeAdmins = (exceptId?: string) => employees.filter((e) => e.id !== exceptId && e.role === "Admin" && e.status === "Active").length;
-
-  const toggle = (e: Employee) => {
-    if (e.status === "Active" && e.role === "Admin" && activeAdmins(e.id) === 0) return void toast.error("At least one Active Admin must remain", "Make someone else an Admin first.");
+  /** Deactivating is the "delete": the record stays, but the person can no longer sign in. The server enforces the last-Admin and own-account rules. */
+  const toggle = async (e: Employee) => {
+    const error = await toggleStatus(e.id);
+    if (error) return void toast.error("Couldn't update the employee", error);
     const next = e.status === "Active" ? "Inactive" : "Active";
-    update(e.id, { status: next });
     toast.success(`${e.name} ${next === "Active" ? "activated" : "deactivated"}`, next === "Active" ? "They can sign in again." : "They can no longer sign in.");
-  };
-  const del = (e: Employee) => {
-    if (e.role === "Admin" && e.status === "Active" && activeAdmins(e.id) === 0) return void toast.error("At least one Active Admin must remain", "Make someone else an Admin first.");
-    const gone = remove(e.id);
-    if (gone) toast.info(`${e.name} removed`, "Their email can no longer sign in.", { action: { label: "Undo", onClick: () => restore(gone) } });
   };
 
   if (me && me.role !== "Admin") {
@@ -166,8 +158,7 @@ export default function EmployeesPage() {
                   setEditing(e);
                   setOpen(true);
                 }}
-                onToggle={() => toggle(e)}
-                onRemove={() => del(e)}
+                onToggle={() => void toggle(e)}
               />
             ))}
           </AnimatePresence>

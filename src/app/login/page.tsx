@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "framer-motion";
-import { ArrowRight, CircleHelp, Mail, Moon, ShieldCheck, Sun } from "lucide-react";
+import { ArrowRight, CircleHelp, Mail, Moon, Sun } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useTheme } from "@/store/theme-store";
 import { toast } from "@/store/toast-store";
@@ -15,7 +15,7 @@ import { ActivationFlow } from "@/components/auth/activation";
 import { PasscodeStep } from "@/components/auth/passcode";
 import { useSettings } from "@/store/settings-store";
 import { sfx } from "@/lib/sound";
-import { DEMO_PASSWORD, forgotPassword, loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
+import { forgotPassword, loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
 import { ACCESS_DENIED, authenticate, useEmployees, type Employee } from "@/store/employee-store";
 import { CockpitBackground, CockpitLogo, GreetingClock, LaunchButton, LaunchStreaks, ShiftLights, TelemetryField, TelemetryPassword, TftTach, revealContainer, revealItem, telemetryInputCls, type LaunchStage } from "@/components/auth/cockpit";
 
@@ -84,8 +84,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
-  const employees = useEmployees((s) => s.employees);
-  const quickAdmin = employees.find((e) => e.role === "Admin" && e.status === "Active");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [flash, setFlash] = useState(false);
   const [mode, setMode] = useState<"signin" | "activate">("signin");
@@ -215,7 +213,7 @@ export default function LoginPage() {
     later(() => {
       // Central admins start on the whole network; someone limited to one showroom lands on that showroom.
       const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
-      useEmployees.getState().signIn(who.id);
+      useEmployees.getState().signIn(who);
       useApp.getState().setBranchScope(scope, { silent: true });
       router.push("/branches");
       toast.success(`Welcome back, ${who.name.split(" ")[0]}`, `Signed in as ${who.role}`);
@@ -260,14 +258,6 @@ export default function LoginPage() {
     if (stage !== "idle") return;
     setErrors({});
     setMode(next);
-  };
-
-  const quickLogin = () => {
-    if (stage !== "idle" || !quickAdmin) return;
-    setErrors({});
-    setEmail(quickAdmin.email);
-    setPassword(DEMO_PASSWORD);
-    timers.current.push(setTimeout(() => proceed(quickAdmin), 450));
   };
 
   return (
@@ -369,13 +359,7 @@ export default function LoginPage() {
 
         {mode === "signin" && !gate && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }} className="mt-4 flex flex-col items-center gap-2.5 text-center">
-          {quickAdmin && (
-            <button type="button" onClick={quickLogin} disabled={stage !== "idle"} className="inline-flex h-9 items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3.5 text-[11.5px] font-medium tracking-wide text-sky-800 outline-none transition-colors hover:bg-sky-500/20 focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-50 dark:text-sky-200">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Quick login · {quickAdmin.name} · {quickAdmin.role}
-            </button>
-          )}
-          <p className="max-w-xs text-[11px] leading-4 tracking-wide text-slate-500 dark:text-slate-400">Only employees registered in the directory can sign in. Demo accounts use the password {DEMO_PASSWORD}.</p>
+          <p className="max-w-xs text-[11px] leading-4 tracking-wide text-slate-500 dark:text-slate-400">Only employees registered in the directory can sign in.</p>
         </motion.div>
         )}
       </motion.div>

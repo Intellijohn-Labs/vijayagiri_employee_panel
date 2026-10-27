@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { sessionEmployee } from "@/lib/session";
 import { STAGES, nextRef, type Claim } from "@/lib/claims";
 
 export type ClaimResult = { ok: true; claim: Claim } | { ok: false; error: string };
@@ -85,6 +86,8 @@ async function syncJobCard(tx: Prisma.TransactionClient, c: Claim) {
   await tx.jobCard.upsert({ where: { claimId: c.id }, create: { claimId: c.id, ...data }, update: data });
 }
 
+const SIGN_IN = "Your session has ended. Please sign in again.";
+
 const fail = (e: unknown): { ok: false; error: string } => {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return { ok: false, error: "That job card number is already used by another claim" };
   return { ok: false, error: "Could not reach the database. Please try again." };
@@ -92,12 +95,14 @@ const fail = (e: unknown): { ok: false; error: string } => {
 
 /** Every claim, newest first. Nothing is generated: an empty table gives an empty list. */
 export async function listClaims(): Promise<Claim[]> {
+  if (!(await sessionEmployee())) throw new Error("Not signed in");
   const rows = await prisma.claim.findMany({ orderBy: { createdAt: "desc" } });
   return rows.map((r) => ({ ...(r.data as unknown as Claim), id: r.id, ref: r.ref }));
 }
 
 /** Creates a claim at stage 1. The reference (CLM-PBR-0012) is allocated here so two people can't get the same one. */
 export async function createClaim(claim: Claim, actor: string, dueAt?: number): Promise<ClaimResult> {
+  if (!(await sessionEmployee())) return { ok: false, error: SIGN_IN };
   if (!valid(claim)) return { ok: false, error: "Invalid claim" };
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -122,6 +127,7 @@ export async function createClaim(claim: Claim, actor: string, dueAt?: number): 
 
 /** Saves the claim as the portal has it and records any stage it has entered or completed. */
 export async function saveClaim(claim: Claim, actor: string, dueAt?: number): Promise<ClaimResult> {
+  if (!(await sessionEmployee())) return { ok: false, error: SIGN_IN };
   if (!valid(claim)) return { ok: false, error: "Invalid claim" };
   try {
     await prisma.$transaction(async (tx) => {

@@ -45,6 +45,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const hydrateCatalogue = useCatalogue((s) => s.hydrate);
   const hydrateInsurance = useInsurance((s) => s.hydrate);
   const hydrateClaims = useClaims((s) => s.hydrate);
+  const loadClaims = useClaims((s) => s.load);
+  const loadBranches = useBranchStore((s) => s.load);
   const hydrateSettings = useSettings((s) => s.hydrate);
   const loadOfficial = useOfficialImages((s) => s.load);
   const officialLoaded = useOfficialImages((s) => s.loaded);
@@ -68,6 +70,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     hydrateSettings();
     loadOfficial();
   }, [hydrateTheme, init, hydrateStock, hydrateBranches, hydrateEmployees, hydrateCatalogue, hydrateInsurance, hydrateClaims, hydrateSettings, loadOfficial]);
+
+  // Claims need a session on the server, so they (and the branch list) are read again once someone has signed in.
+  const meId = me?.id;
+  useEffect(() => {
+    if (!meId) return;
+    void loadClaims();
+    void loadBranches();
+  }, [meId, loadClaims, loadBranches]);
 
   // Strict access: no session, a removed employee, or a deactivated one all end up back at the sign-in screen.
   const signedIn = !!me && me.status === "Active";

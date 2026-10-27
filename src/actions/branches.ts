@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { sessionIsAdmin } from "@/lib/session";
 import { parseBranchInput, seedRows, type BranchRecord } from "@/lib/branch-api";
 
 export type BranchResult = { ok: true; branch: BranchRecord } | { ok: false; error: string };
@@ -11,6 +12,8 @@ export type BranchResult = { ok: true; branch: BranchRecord } | { ok: false; err
 const refresh = () => {
   for (const path of ["/branches", "/stock", "/claims", "/settings"]) revalidatePath(path);
 };
+
+const NOT_ADMIN = "Unauthorized: Only Admins can modify branch details.";
 
 const fail = (e: unknown): BranchResult => {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
@@ -27,6 +30,7 @@ export async function getBranches(): Promise<BranchRecord[]> {
 }
 
 export async function createBranch(formData: FormData): Promise<BranchResult> {
+  if (!(await sessionIsAdmin())) return { ok: false, error: NOT_ADMIN };
   const parsed = parseBranchInput(formData, false);
   if ("error" in parsed) return { ok: false, error: parsed.error };
   try {
@@ -40,6 +44,7 @@ export async function createBranch(formData: FormData): Promise<BranchResult> {
 
 /** `id` is the branch code ("perumbavoor"), the id the portal uses everywhere. The code itself is not editable. */
 export async function updateBranch(id: string, formData: FormData): Promise<BranchResult> {
+  if (!(await sessionIsAdmin())) return { ok: false, error: NOT_ADMIN };
   formData.delete("code");
   const parsed = parseBranchInput(formData, true);
   if ("error" in parsed) return { ok: false, error: parsed.error };
@@ -54,6 +59,7 @@ export async function updateBranch(id: string, formData: FormData): Promise<Bran
 
 /** Soft delete: flips `isActive` so claims and stock that point at the branch keep resolving. */
 export async function toggleBranchStatus(id: string): Promise<BranchResult> {
+  if (!(await sessionIsAdmin())) return { ok: false, error: NOT_ADMIN };
   try {
     const current = await prisma.branch.findUnique({ where: { code: id }, select: { isActive: true } });
     if (!current) return { ok: false, error: "Branch not found" };
