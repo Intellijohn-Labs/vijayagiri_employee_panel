@@ -14,7 +14,7 @@ import { spring } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { STAGES } from "@/lib/claims";
 import { useClaimStats } from "@/components/claims/stats";
-import { BrandLogo, LogoMark } from "./logo";
+import { DriveByLogo } from "./drive-by-logo";
 
 /** Everything the Admin can open from the sidebar. */
 export const NAV = [
@@ -149,7 +149,7 @@ export function Sidebar() {
         )}
       >
         <div className={cn("flex items-center gap-2.5 px-1", slim && "justify-center px-0")}>
-          {slim ? <LogoMark /> : <BrandLogo className="w-[184px] shrink" />}
+          <DriveByLogo slim={slim} />
           {!slim && <span className="flex-1" />}
           {!isDesktop && (
             <Button variant="ghost" size="sm" iconOnly onClick={() => setMobileNav(false)} aria-label="Close menu">
