@@ -6,22 +6,28 @@ import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { BrandLogo, LogoMark } from "./logo";
 
-const MORPH_MS = 350;
-const DRIVE_MS = 1600;
+/** The badge sits still this long so the time can be read. */
+const PAUSE_MS = 1500;
+const MORPH_MS = 300;
+/** How long the ride across the screen takes. */
+const DRIVE_MS = 3500;
+/** After it has left the right edge, the logo waits this long before fading back in. */
+const RETURN_DELAY_MS = 400;
 
 type Phase = "idle" | "morph" | "drive";
 
-const fullTime = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-const shortTime = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+/** 12-hour clock, e.g. "10:39 PM". */
+const timeFormat = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 
-/** A tiny tachometer: arc, redline and a needle resting near idle. */
-function MiniGauge() {
+/** A small sport-bike silhouette that rides with the time. */
+function MiniBike() {
   return (
-    <svg viewBox="0 0 24 16" className="h-4 w-6 shrink-0" fill="none" aria-hidden>
-      <path d="M2 14a10 10 0 0 1 20 0" stroke="#22d3ee" strokeOpacity="0.5" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M17.5 5.2a10 10 0 0 1 4.5 8.8" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M12 14L7.5 8.5" stroke="#e0f2fe" strokeWidth="1.6" strokeLinecap="round" />
-      <circle cx="12" cy="14" r="1.6" fill="#22d3ee" />
+    <svg viewBox="0 0 36 20" className="h-5 w-9 shrink-0 drop-shadow-[0_0_6px_rgba(34,211,238,0.7)]" fill="none" stroke="#67e8f9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="7" cy="14" r="4.5" />
+      <circle cx="29" cy="14" r="4.5" />
+      {/* frame, tank and fairing */}
+      <path d="M7 14L14 9.5L22 9.5L26 5.5L31 5.5M22 9.5L29 14M14 9.5L18 14H24" />
+      <path d="M12 8.5C14 6.2 19 5.6 23 6.8" />
     </svg>
   );
 }
@@ -35,7 +41,7 @@ const SPARKS = [
 ];
 
 /**
- * The sidebar logo, with a hidden trick: tap it and it turns into a glowing digital time badge, which then rides right across
+ * The sidebar logo, with a hidden trick: tap it and it turns into a glowing digital time badge that holds still for 1.5 s so the time can be read, then rides right across
  * the whole screen, past the top bar, trailing a cyan streak, and out of the right edge; the logo then fades back in. While it
  * rides, the badge lives in a fixed layer on the page (a portal), so the sidebar's clipping can't cut it off. Only transform
  * and opacity are animated.
@@ -49,7 +55,7 @@ export function DriveByLogo({ slim }: { slim: boolean }) {
   const [origin, setOrigin] = useState({ left: 0, top: 0, height: 0 });
   const box = useRef<HTMLButtonElement>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const format = (d: Date) => (slim ? shortTime.format(d) : fullTime.format(d));
+  const format = (d: Date) => timeFormat.format(d);
 
   useEffect(() => {
     const t = timers.current;
@@ -61,8 +67,7 @@ export function DriveByLogo({ slim }: { slim: boolean }) {
     if (phase === "idle") return;
     const id = setInterval(() => setTime(format(new Date())), 1000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, slim]);
+  }, [phase]);
 
   const go = () => {
     if (phase !== "idle") return;
@@ -75,12 +80,13 @@ export function DriveByLogo({ slim }: { slim: boolean }) {
     const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
     if (reduced) {
       // No riding off: the badge just shows for a moment and the logo returns.
-      later(() => setPhase("idle"), 1600);
+      later(() => setPhase("idle"), PAUSE_MS + 300);
       return;
     }
-    later(() => setPhase("drive"), MORPH_MS);
-    // Once it is off the right edge, the logo fades back in where it was.
-    later(() => setPhase("idle"), MORPH_MS + DRIVE_MS + 60);
+    // Pause so the time can be read, then cruise across the screen.
+    later(() => setPhase("drive"), PAUSE_MS);
+    // Once it has left the right edge, the logo fades back in where it was after a short beat.
+    later(() => setPhase("idle"), PAUSE_MS + DRIVE_MS + RETURN_DELAY_MS);
   };
 
   const driving = phase === "drive";
@@ -100,16 +106,16 @@ export function DriveByLogo({ slim }: { slim: boolean }) {
             style={{ left: origin.left, top: origin.top, height: origin.height }}
             initial={{ opacity: 0, scale: 0.8, x: 0 }}
             animate={driving ? { opacity: 1, scale: 1, x: travel } : { opacity: 1, scale: 1, x: 0 }}
-            transition={driving ? { duration: DRIVE_MS / 1000, ease: [0.45, 0, 0.35, 1] } : { duration: MORPH_MS / 1000, ease: "easeOut" }}
+            transition={driving ? { duration: DRIVE_MS / 1000, ease: [0.2, 0.55, 0.45, 1] } : { duration: MORPH_MS / 1000, ease: "easeOut" }}
           >
-            <span className="relative inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-cyan-400/30 bg-zinc-950 px-2 py-1.5 font-mono text-[12px] font-bold tracking-widest text-cyan-300 shadow-[0_0_18px_rgba(0,80,255,0.55),inset_0_0_10px_rgba(0,80,255,0.3)] [text-shadow:0_0_10px_rgba(34,211,238,0.85)]">
+            <span className="relative inline-flex items-center gap-2.5 whitespace-nowrap rounded-lg border border-cyan-400/30 bg-zinc-950 px-3 py-1.5 font-mono text-sm font-bold tracking-widest text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)] shadow-[0_0_18px_rgba(0,80,255,0.55),inset_0_0_10px_rgba(0,80,255,0.3)] sm:text-base">
               {/* exhaust streak and sparks behind it, once it is moving */}
               <motion.span aria-hidden className="absolute right-full top-1/2 h-[3px] w-44 -translate-y-1/2 rounded-full bg-gradient-to-l from-cyan-300 via-blue-500/70 to-transparent blur-[1px]" initial={{ opacity: 0, scaleX: 0.2 }} animate={driving ? { opacity: 1, scaleX: 1 } : { opacity: 0, scaleX: 0.2 }} style={{ originX: 1 }} transition={{ duration: 0.4, ease: "easeOut" }} />
               {SPARKS.map((p) => (
                 <motion.span key={p.r} aria-hidden className="absolute top-1/2 h-1 w-1 rounded-full bg-cyan-200 shadow-[0_0_6px_2px_rgba(34,211,238,0.8)]" style={{ right: `calc(100% + ${p.r}px)`, marginTop: p.y }} initial={{ opacity: 0 }} animate={{ opacity: driving ? p.o : 0 }} transition={{ duration: 0.4, delay: 0.1 }} />
               ))}
-              {!slim && <MiniGauge />}
-              <span className={slim ? "text-[10px] tracking-wider" : undefined}>{time}</span>
+              <MiniBike />
+              <span>{time}</span>
             </span>
           </motion.span>,
           document.body,
