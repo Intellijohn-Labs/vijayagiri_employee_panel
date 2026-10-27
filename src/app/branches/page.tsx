@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Building2, Clock, Copy, MapPin, MessageCircle, Navigation, Pencil, Phone, PhoneOff, Plus, Store, UserRound } from "lucide-react";
+import { Building2, Clock, Copy, MapPin, MessageCircle, Navigation, Pencil, Phone, PhoneOff, Plus, Store, Trash2, UserRound } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useStock } from "@/store/stock-store";
 import { STATUS_SHORT } from "@/lib/stock-options";
@@ -11,14 +11,15 @@ import { toast } from "@/store/toast-store";
 import { branchLabel } from "@/lib/branches";
 import type { Branch } from "@/lib/branches";
 import { useBranch, useBranchStore, useBranchTools } from "@/store/branch-store";
-import { intlDigits, useIsAdmin } from "@/store/employee-store";
+import { intlDigits, useIsAdmin, useSessionEmployee } from "@/store/employee-store";
+import { isRootEmail } from "@/lib/employees";
 import { isOpenNow, useSettings } from "@/store/settings-store";
 import { EditBranchDrawer } from "@/components/branches/edit-branch-drawer";
 import { AddBranchDrawer } from "@/components/branches/add-branch-drawer";
 import { cn } from "@/lib/utils";
 import { fadeUp, spring, stagger } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
-import { Drawer } from "@/components/ui/overlay";
+import { ConfirmDialog, Drawer } from "@/components/ui/overlay";
 import { Badge, Card, PageHeader } from "@/components/ui/primitives";
 
 const mapsUrl = (b: Branch) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${b.name}, ${b.address}`)}`;
@@ -83,7 +84,7 @@ function ActiveToggle({ branch }: { branch: Branch }) {
   );
 }
 
-function BranchCard({ branch, canEdit, onDetails, onEdit }: { branch: Branch; /** Admins only — everyone else gets the view-only card */ canEdit: boolean; onDetails: () => void; onEdit: () => void }) {
+function BranchCard({ branch, canEdit, onDelete, onDetails, onEdit }: { branch: Branch; /** Root admin only */ onDelete?: () => void; /** Admins only — everyone else gets the view-only card */ canEdit: boolean; onDetails: () => void; onEdit: () => void }) {
   const hq = branch.kind === "hq";
   const Icon = hq ? Building2 : Store;
   return (
@@ -144,6 +145,11 @@ function BranchCard({ branch, canEdit, onDetails, onEdit }: { branch: Branch; /*
             </Button>
           )}
           {canEdit && <ActiveToggle branch={branch} />}
+          {onDelete && (
+            <button type="button" onClick={onDelete} aria-label={`Delete ${branch.name}`} title="Delete showroom permanently" className="grid h-7 w-7 place-items-center rounded-md text-danger outline-none transition-colors hover:bg-danger-tint focus-visible:ring-2 focus-visible:ring-danger/50">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           <span className="ml-auto flex items-center gap-0.5">
             <CallLink branch={branch} />
             <DirectionsLink branch={branch} />
@@ -293,6 +299,20 @@ export default function BranchesPage() {
   const lastDetails = useBranch(lastDetailsId) ?? null;
   const isAdmin = useIsAdmin();
   const loading = useBranchStore((s) => s.loading);
+  const me = useSessionEmployee();
+  const isRoot = isRootEmail(me?.email);
+  const removeBranch = useBranchStore((s) => s.removeBranch);
+  const [deleting, setDeleting] = useState<Branch | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    const error = await removeBranch(deleting.id);
+    setDeleteBusy(false);
+    if (error) return void toast.error("Couldn't delete the showroom", error);
+    toast.success("Showroom deleted", deleting.name);
+    setDeleting(null);
+  };
   const [adding, setAdding] = useState(false);
 
   const selected = branchById(scope);
@@ -335,6 +355,7 @@ export default function BranchesPage() {
             key={b.id}
             branch={b}
             canEdit={isAdmin}
+            onDelete={isRoot ? () => setDeleting(b) : undefined}
             onDetails={() => {
               setLastDetailsId(b.id);
               setDetailsId(b.id);
@@ -345,6 +366,20 @@ export default function BranchesPage() {
       </motion.div>
 
       <BranchDrawer branch={lastDetails} canEdit={isAdmin} open={detailsId !== null} onClose={() => setDetailsId(null)} onEdit={() => lastDetails && startEdit(lastDetails.id)} />
+      <ConfirmDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => void confirmDelete()}
+        title="Delete showroom?"
+        message={
+          <>
+            Are you sure you want to permanently delete <strong className="text-fg">{deleting?.name}</strong>? Staff lose access to it. This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete permanently"
+        busy={deleteBusy}
+        destructive
+      />
       {isAdmin && <AddBranchDrawer open={adding} onClose={() => setAdding(false)} />}
       {isAdmin && <EditBranchDrawer branchId={lastEditId} open={editId !== null} onClose={() => setEditId(null)} />}
     </>

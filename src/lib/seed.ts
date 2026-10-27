@@ -15,6 +15,8 @@ const EMPLOYEES = [
 ];
 
 export async function seedBranches(db: PrismaClient) {
+  // Only on an empty table: a showroom the root admin deleted must not come back on the next deploy.
+  if ((await db.branch.count()) > 0) return;
   for (const row of seedRows()) await db.branch.upsert({ where: { code: row.code }, update: {}, create: row });
 }
 

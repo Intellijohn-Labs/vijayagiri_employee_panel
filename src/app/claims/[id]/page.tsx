@@ -2,12 +2,17 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, SearchX, TriangleAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, SearchX, Trash2, TriangleAlert } from "lucide-react";
 import { useBranch } from "@/store/branch-store";
 import { useClaims } from "@/store/claims-store";
 import { useSessionEmployee, canAccess } from "@/store/employee-store";
 import { estimateTotal, fmtDateTime, healthOf, isEscalated, slaSummary, stageDef, type Claim, type StageNo } from "@/lib/claims";
 import { cn, formatINR } from "@/lib/utils";
+import { isRootEmail } from "@/lib/employees";
+import { toast } from "@/store/toast-store";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/overlay";
 import { Card } from "@/components/ui/primitives";
 import { useCodeRedBeeper } from "@/components/claims/beat";
 import { HealthBadge, SlaHero, TopManagementAlert, useClock, useSla } from "@/components/claims/sla";
@@ -41,6 +46,19 @@ export default function ClaimPage({ params }: { params: Promise<{ id: string }> 
 
 function ClaimView({ claim }: { claim: Claim }) {
   const branch = useBranch(claim.branchId);
+  const me = useSessionEmployee();
+  const router = useRouter();
+  const removeClaim = useClaims((s) => s.remove);
+  const [confirming, setConfirming] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = async () => {
+    setDeleteBusy(true);
+    const error = await removeClaim(claim.id);
+    setDeleteBusy(false);
+    if (error) return void toast.error("Couldn't delete the claim", error);
+    toast.success("Claim deleted", `${claim.ref} and its job card and stage history were permanently removed.`);
+    router.replace("/claims");
+  };
   const now = useClock();
   const sla = useSla(claim);
   // A stage picked in the stepper only holds while the claim stays where it is; moving on brings the view back to the stage in progress.
@@ -72,7 +90,26 @@ function ClaimView({ claim }: { claim: Claim }) {
             {claim.claimNo ? `${claim.ref} · ` : "Claim no. assigned at Stage 2 · "}{claim.jobCardNo ? `Job card ${claim.jobCardNo}` : "Job card assigned at Stage 2"}
           </p>
         </div>
+        {isRootEmail(me?.email) && (
+          <Button variant="ghost" className="shrink-0 text-danger hover:!bg-danger-tint hover:!text-danger" leading={<Trash2 className="h-3.5 w-3.5" />} onClick={() => setConfirming(true)}>
+            Delete Claim
+          </Button>
+        )}
       </div>
+      <ConfirmDialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={() => void confirmDelete()}
+        title="Delete claim?"
+        message={
+          <>
+            Are you sure you want to permanently delete claim <strong className="text-fg">{claim.ref}</strong> with its job card and stage history? This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete permanently"
+        busy={deleteBusy}
+        destructive
+      />
 
       {breached && isEscalated(sla) ? (
         <TopManagementAlert className="mb-5" label={sla?.label} />

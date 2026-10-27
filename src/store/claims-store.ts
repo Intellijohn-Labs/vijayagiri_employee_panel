@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { create } from "zustand";
-import { saveClaimFile } from "@/lib/photo-db";
-import { createClaim, listClaims, saveClaim } from "@/actions/claims";
+import { deleteClaimFile, saveClaimFile } from "@/lib/photo-db";
+import { createClaim, deleteClaim, listClaims, saveClaim } from "@/actions/claims";
 import { HOUR, SLA, blankClaim, isEscalated, logEntry, missingFor, nextGatepassNo, nextRef, slaFor, stageDef, type Claim, type ClaimEvent, type ClaimFile, type Intake, type StageNo } from "@/lib/claims";
 import { fmtHours, stageSla } from "@/lib/sla-config";
 import { canAccess, useAccessibleIds, useEmployees, type Employee } from "./employee-store";
@@ -25,6 +25,8 @@ interface ClaimsState {
   hydrate: () => void;
   /** Re-reads every claim from PostgreSQL. */
   load: () => Promise<void>;
+  /** Permanently deletes a claim with its job card and stage history (root admin only). Returns the error message, or null. */
+  remove: (id: string) => Promise<string | null>;
   create: (intake: Intake) => Claim;
   /** Shallow-merge fields into a claim (sections are replaced whole). */
   set: (id: string, patch: Partial<Claim>) => void;
@@ -107,6 +109,14 @@ export const useClaims = create<ClaimsState>((set, get) => {
       } catch {
         set({ hydrated: true, loadError: true });
       }
+    },
+    remove: async (id) => {
+      const res = await deleteClaim(id).catch(() => null);
+      if (!res) return "Could not reach the server. Please try again.";
+      if (!res.ok) return res.error;
+      set({ claims: get().claims.filter((c) => c.id !== id) });
+      void Promise.all((["survey", "ramp"] as const).map((slot) => deleteClaimFile(fileId(id, slot)).catch(() => undefined)));
+      return null;
     },
     create: (intake) => {
       const now = Date.now();

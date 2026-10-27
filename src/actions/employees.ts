@@ -5,7 +5,8 @@ import { Prisma } from "@/generated/prisma/client";
 import type { Employee as Row } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { endSession, sessionEmployee, startSession } from "@/lib/session";
+import { UNAUTHORIZED_ROOT, endSession, rootSession, sessionEmployee, startSession } from "@/lib/session";
+import { logAudit } from "@/lib/audit";
 import { ensureSeeded } from "@/lib/seed";
 import { EMPLOYEE_ROLES, ROOT_ONLY_MESSAGE, ROOT_PROTECTED_MESSAGE, isRootEmail, type Employee, type EmployeeInput, type EmployeeRole } from "@/lib/employees";
 
@@ -65,17 +66,22 @@ export async function signOutAction() {
 export async function signInAction(identifier: string, password: string): Promise<AuthResult> {
   await ensureSeeded(prisma);
   const key = norm(identifier);
-  if (locked(key)) return { ok: false, reason: "locked" };
+  if (locked(key)) {
+    await logAudit({ action: "auth.locked", entity: "auth", actor: { email: key, name: "Unknown" }, details: { identifier: key } });
+    return { ok: false, reason: "locked" };
+  }
   const row = await byIdentifier(identifier);
   if (!row) return { ok: false, reason: "not-found" };
   if (!row.isActive) return { ok: false, reason: "inactive" };
   if (!row.password) return { ok: false, reason: "not-activated" };
   if (!(await verifyPassword(password, row.password))) {
     failed(key);
+    await logAudit({ action: "auth.login_failed", entity: "auth", entityId: row.id, actor: { email: row.email, name: row.name }, details: { reason: "wrong password" } });
     return { ok: false, reason: "wrong-password" };
   }
   failures.delete(key);
-  await startSession(row.id);
+  await startSession(row);
+  await logAudit({ action: "auth.login", entity: "auth", entityId: row.id, actor: { email: row.email, name: row.name } });
   return { ok: true, employee: toEmployee(row) };
 }
 
@@ -96,7 +102,7 @@ export async function activateAccountAction(email: string, password: string): Pr
   if (!check.ok) return null;
   const { count } = await prisma.employee.updateMany({ where: { id: check.employee.id, isActive: true, password: null }, data: { password: await hashPassword(password) } });
   if (!count) return null;
-  await startSession(check.employee.id);
+  await startSession({ id: check.employee.id, email: check.employee.email });
   return { ...check.employee, activated: true };
 }
 
@@ -169,6 +175,7 @@ export async function createEmployee(input: EmployeeInput): Promise<EmployeeResu
   if (parsed.data.isActive === false && !isRootEmail(me.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
   try {
     const row = await prisma.employee.create({ data: parsed.data as Prisma.EmployeeUncheckedCreateInput });
+    await logAudit({ action: "employee.create", entity: "employee", entityId: row.id, details: { name: row.name, email: row.email, role: row.role } });
     revalidatePath("/employees");
     return { ok: true, employee: toEmployee(row) };
   } catch (e) {
@@ -199,6 +206,7 @@ export async function updateEmployee(id: string, input: EmployeeInput): Promise<
   if (current.role === "Admin" && current.isActive && !stillActiveAdmin && (await lastAdmin(id))) return { ok: false, error: "At least one Active Admin must remain" };
   try {
     const row = await prisma.employee.update({ where: { id }, data: parsed.data });
+    await logAudit({ action: "employee.update", entity: "employee", entityId: id, details: { name: row.name, email: row.email, ...(current.role !== row.role && { role: `${current.role} → ${row.role}` }) } });
     revalidatePath("/employees");
     return { ok: true, employee: toEmployee(row) };
   } catch (e) {
@@ -220,6 +228,7 @@ export async function toggleEmployeeStatus(id: string): Promise<EmployeeResult> 
   }
   try {
     const row = await prisma.employee.update({ where: { id }, data: { isActive: !current.isActive } });
+    await logAudit({ action: row.isActive ? "employee.activate" : "employee.deactivate", entity: "employee", entityId: id, details: { name: row.name, email: row.email } });
     revalidatePath("/employees");
     return { ok: true, employee: toEmployee(row) };
   } catch (e) {
@@ -229,14 +238,15 @@ export async function toggleEmployeeStatus(id: string): Promise<EmployeeResult> 
 
 /** Permanently removes an employee. Only the root admin may do this, and never to the root admin itself. */
 export async function deleteEmployee(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const me = await sessionEmployee();
-  if (!isRootEmail(me?.email)) return { ok: false, error: ROOT_ONLY_MESSAGE };
-  const target = await prisma.employee.findUnique({ where: { id }, select: { id: true, email: true } });
+  const me = await rootSession();
+  if (!me) return { ok: false, error: UNAUTHORIZED_ROOT };
+  const target = await prisma.employee.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true } });
   if (!target) return { ok: false, error: "Employee not found" };
   if (isRootEmail(target.email) || target.id === me?.id) return { ok: false, error: ROOT_PROTECTED_MESSAGE };
   try {
     // Nothing else in the database points at an employee (claims keep the name as text), so a plain delete is enough.
     await prisma.employee.delete({ where: { id } });
+    await logAudit({ action: "employee.delete", entity: "employee", entityId: id, details: { name: target.name, email: target.email, role: target.role } });
     revalidatePath("/employees");
     return { ok: true };
   } catch (e) {

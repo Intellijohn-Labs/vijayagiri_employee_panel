@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookImage, Boxes, Building2, MonitorPlay, PackagePlus, PanelLeftClose, ChevronDown, PanelLeftOpen, Settings, ShieldCheck, Siren, Users, Wrench, X } from "lucide-react";
+import { BookImage, Boxes, Building2, MonitorPlay, PackagePlus, PanelLeftClose, ChevronDown, PanelLeftOpen, ScrollText, Settings, ShieldCheck, Siren, Users, Wrench, X } from "lucide-react";
+import { isRootEmail } from "@/lib/employees";
 import { useApp } from "@/store/app-store";
 import { useSessionEmployee } from "@/store/employee-store";
 import { useIsDesktop } from "@/lib/hooks";
@@ -25,6 +26,7 @@ export const NAV = [
   { href: "/claims", label: "Claims & Workshop", icon: Wrench, group: "Operations" },
   { href: "/employees", label: "Employees", icon: Users, adminOnly: true, group: "Management" },
   { href: "/catalogue/manage", label: "Catalogue Manager", icon: BookImage, adminOnly: true, group: "Management" },
+  { href: "/admin/audit-logs", label: "Audit Logs", icon: ScrollText, rootOnly: true, group: "System" },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true, group: "System" },
 ] as const;
 
@@ -33,7 +35,7 @@ export function activeNav(pathname: string) {
   return [...NAV].filter((n) => pathname === n.href || pathname.startsWith(`${n.href}/`)).sort((a, b) => b.href.length - a.href.length)[0];
 }
 
-type NavItem = { href: string; label: string; icon: typeof Users; adminOnly?: boolean; group: "Workspace" | "Operations" | "Management" | "System" };
+type NavItem = { href: string; label: string; icon: typeof Users; adminOnly?: boolean; rootOnly?: boolean; group: "Workspace" | "Operations" | "Management" | "System" };
 
 function NavLink({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate: () => void }) {
   const pathname = usePathname();
@@ -129,7 +131,7 @@ export function Sidebar() {
   const isDesktop = useIsDesktop();
   const me = useSessionEmployee();
   // Employees is for Admins only; everyone else never sees the entry.
-  const items = (NAV as readonly NavItem[]).filter((n) => !n.adminOnly || me?.role === "Admin");
+  const items = (NAV as readonly NavItem[]).filter((n) => (!n.adminOnly || me?.role === "Admin") && (!n.rootOnly || isRootEmail(me?.email)));
   const slim = isDesktop && collapsed;
 
   return (

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { BASE_BRANCHES, type Branch } from "@/lib/branches";
 import type { BranchRecord } from "@/lib/branch-api";
-import { createBranch, getBranches as fetchBranches, toggleBranchStatus, updateBranch, type BranchResult } from "@/actions/branches";
+import { createBranch, deleteBranch, getBranches as fetchBranches, toggleBranchStatus, updateBranch, type BranchResult } from "@/actions/branches";
 import { sessionIsAdmin, useAccessibleIds } from "./employee-store";
 import { toast } from "./toast-store";
 import { getSettings, hoursText, useSettings } from "./settings-store";
@@ -31,6 +31,8 @@ interface BranchState {
   saveRemote: (id: string | null, form: BranchForm) => Promise<string | null>;
   /** Activate / deactivate; returns the error message, or null on success. */
   toggleActive: (id: string) => Promise<string | null>;
+  /** Permanently delete a showroom (root admin only); returns the error message, or null on success. */
+  removeBranch: (id: string) => Promise<string | null>;
   /** Both return false (and tell the user) when the signed-in employee is not an Admin; nothing is changed. */
   save: (id: string, patch: Partial<Omit<Branch, "id">>) => boolean;
   reset: (id: string) => boolean;
@@ -84,6 +86,15 @@ export const useBranchStore = create<BranchState>((set, get) => ({
     const res = await toggleBranchStatus(id).catch(() => ({ ok: false as const, error: "Could not reach the server" }));
     if (!res.ok) return res.error;
     set({ remote: { ...get().remote, [res.branch.code]: res.branch } });
+    return null;
+  },
+  removeBranch: async (id) => {
+    const res = await deleteBranch(id).catch(() => null);
+    if (!res) return "Could not reach the server. Please try again.";
+    if (!res.ok) return res.error;
+    const { [id]: _gone, ...rest } = get().remote;
+    void _gone;
+    set({ remote: rest });
     return null;
   },
   hydrate: () => {
@@ -146,7 +157,8 @@ const fromNewRecord = (r: BranchRecord, hours: string): Branch => ({
  * (database only) are appended. Inactive branches stay in the list, flagged, so ids on old claims and stock still resolve.
  */
 const merge = (edits: BranchEdits, hours: string, remote: Remote): Branch[] => [
-  ...BASE_BRANCHES.map((b) => ({ ...b, hours, ...edits[b.id], ...(remote[b.id] && fromRecord(remote[b.id])) })),
+  // Once the database has answered, a built-in showroom that is no longer in it has been deleted.
+  ...BASE_BRANCHES.filter((b) => Object.keys(remote).length === 0 || remote[b.id]).map((b) => ({ ...b, hours, ...edits[b.id], ...(remote[b.id] && fromRecord(remote[b.id])) })),
   ...Object.values(remote)
     .filter((r) => !BASE_BRANCHES.some((b) => b.id === r.code))
     .map((r) => ({ ...fromNewRecord(r, hours), ...edits[r.code], ...fromRecord(r) })),

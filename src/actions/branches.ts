@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sessionIsAdmin } from "@/lib/session";
+import { UNAUTHORIZED_ROOT, rootSession, sessionIsAdmin } from "@/lib/session";
+import { logAudit } from "@/lib/audit";
 import { parseBranchInput, seedRows, type BranchRecord } from "@/lib/branch-api";
 
 export type BranchResult = { ok: true; branch: BranchRecord } | { ok: false; error: string };
@@ -35,6 +36,7 @@ export async function createBranch(formData: FormData): Promise<BranchResult> {
   if ("error" in parsed) return { ok: false, error: parsed.error };
   try {
     const branch = await prisma.branch.create({ data: { ...parsed.data, name: parsed.data.name!, code: parsed.data.code! } });
+    await logAudit({ action: "branch.create", entity: "branch", entityId: branch.code, branchId: branch.code, details: { name: branch.name } });
     refresh();
     return { ok: true, branch };
   } catch (e) {
@@ -64,9 +66,38 @@ export async function toggleBranchStatus(id: string): Promise<BranchResult> {
     const current = await prisma.branch.findUnique({ where: { code: id }, select: { isActive: true } });
     if (!current) return { ok: false, error: "Branch not found" };
     const branch = await prisma.branch.update({ where: { code: id }, data: { isActive: !current.isActive } });
+    await logAudit({ action: branch.isActive ? "branch.activate" : "branch.deactivate", entity: "branch", entityId: id, branchId: id, details: { name: branch.name } });
     refresh();
     return { ok: true, branch };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/**
+ * Permanently deletes a showroom (root admin only). Staff who had it lose that access (and their primary showroom, if it was this one).
+ * A showroom that still has claims can't be deleted, so no claim is ever left pointing at a branch that no longer exists.
+ */
+export async function deleteBranch(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(await rootSession())) return { ok: false, error: UNAUTHORIZED_ROOT };
+  try {
+    const branch = await prisma.branch.findUnique({ where: { code: id } });
+    if (!branch) return { ok: false, error: "Branch not found" };
+    const claims = await prisma.claim.count({ where: { branchId: id } });
+    if (claims > 0) return { ok: false, error: `${branch.name} still has ${claims} claim${claims === 1 ? "" : "s"}. Delete or finish those first.` };
+    await prisma.$transaction(async (tx) => {
+      const staff = await tx.employee.findMany({ where: { OR: [{ branchId: branch.id }, { branchCodes: { has: id } }] }, select: { id: true, branchCodes: true } });
+      for (const e of staff) {
+        const codes = e.branchCodes.filter((c) => c !== id);
+        await tx.employee.update({ where: { id: e.id }, data: { branchCodes: codes, branchId: null } });
+      }
+      await tx.branch.delete({ where: { id: branch.id } });
+    });
+    await logAudit({ action: "branch.delete", entity: "branch", entityId: id, branchId: id, details: { name: branch.name } });
+    refresh();
+    revalidatePath("/employees");
+    return { ok: true };
+  } catch (e) {
+    return fail(e) as { ok: false; error: string };
   }
 }

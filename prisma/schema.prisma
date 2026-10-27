@@ -145,3 +145,25 @@ model Employee {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+/// Who did what, and when: employee changes, branch changes, claim creation, stage moves, deletions and sign-ins.
+/// Readable only by the root admin (admin@vijayagiri.in).
+model AuditLog {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  actorEmail String
+  actorName  String
+  /// e.g. "employee.create", "claim.stage_change", "branch.delete", "auth.login"
+  action     String
+  /// employee | branch | claim | auth
+  entity     String
+  entityId   String?
+  /// Showroom (Branch.code) the action relates to, when it has one
+  branchId   String?
+  ip         String?
+  details    Json?
+
+  @@index([at])
+  @@index([action])
+  @@index([actorEmail])
+}

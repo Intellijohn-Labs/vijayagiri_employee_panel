@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sessionEmployee } from "@/lib/session";
+import { UNAUTHORIZED_ROOT, rootSession, sessionEmployee } from "@/lib/session";
+import { logAudit } from "@/lib/audit";
 import { STAGES, nextRef, type Claim } from "@/lib/claims";
 
 export type ClaimResult = { ok: true; claim: Claim } | { ok: false; error: string };
@@ -114,6 +115,7 @@ export async function createClaim(claim: Claim, actor: string, dueAt?: number): 
         await syncJobCard(tx, saved);
         await syncHistory(tx, saved, actor, dueAt);
       });
+      await logAudit({ action: "claim.create", entity: "claim", entityId: saved.id, branchId: saved.branchId, details: { ref, customer: saved.customerName, regNo: saved.regNo } });
       revalidatePath("/claims");
       return { ok: true, claim: saved };
     } catch (e) {
@@ -130,14 +132,32 @@ export async function saveClaim(claim: Claim, actor: string, dueAt?: number): Pr
   if (!(await sessionEmployee())) return { ok: false, error: SIGN_IN };
   if (!valid(claim)) return { ok: false, error: "Invalid claim" };
   try {
+    const before = await prisma.claim.findUnique({ where: { id: claim.id }, select: { currentStage: true, closedAt: true, ref: true } });
     await prisma.$transaction(async (tx) => {
       await tx.claim.update({ where: { id: claim.id }, data: columns(claim) });
       await syncJobCard(tx, claim);
       await syncHistory(tx, claim, actor, dueAt);
     });
+    if (before && before.currentStage !== claim.stage) await logAudit({ action: "claim.stage_change", entity: "claim", entityId: claim.id, branchId: claim.branchId, details: { ref: before.ref, from: before.currentStage, to: claim.stage, stage: STAGES[claim.stage - 1]?.name } });
+    if (before && !before.closedAt && claim.closedAt) await logAudit({ action: "claim.delivered", entity: "claim", entityId: claim.id, branchId: claim.branchId, details: { ref: before.ref, customer: claim.customerName } });
     revalidatePath("/claims");
     return { ok: true, claim };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** Permanently deletes a claim with its job card and stage history (both cascade). Root admin only. */
+export async function deleteClaim(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(await rootSession())) return { ok: false, error: UNAUTHORIZED_ROOT };
+  try {
+    const claim = await prisma.claim.findUnique({ where: { id }, select: { ref: true, branchId: true, customerName: true, currentStage: true } });
+    if (!claim) return { ok: false, error: "Claim not found" };
+    await prisma.claim.delete({ where: { id } });
+    await logAudit({ action: "claim.delete", entity: "claim", entityId: id, branchId: claim.branchId, details: { ref: claim.ref, customer: claim.customerName, stage: claim.currentStage } });
+    revalidatePath("/claims");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not delete the claim. Please try again." };
   }
 }
