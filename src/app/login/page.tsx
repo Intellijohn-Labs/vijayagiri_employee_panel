@@ -143,14 +143,28 @@ function SplitLogo() {
   );
 }
 
-/** The telemetry line that sweeps in above the card while the workspace is being prepared. */
-function UnlockLine() {
+/** A soft blue and cyan ring of light that sweeps out from the card across the whole screen. GPU-only: just a scale and a fade. */
+function Shockwave() {
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="absolute inset-x-0 bottom-full mb-4" aria-live="polite">
-      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-[#0020B2] dark:text-sky-300">Access Verified • Initializing Workspace</p>
-      <div className="mt-2 h-[2px] overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
-        <motion.div initial={{ x: "-100%" }} animate={{ x: "0%" }} transition={{ duration: 0.5, ease: "easeInOut" }} className="h-full w-full bg-gradient-to-r from-transparent via-[#0050FF] to-[#0050FF]" />
-      </div>
+    <motion.div
+      aria-hidden
+      initial={{ scale: 0.04, opacity: 0.95 }}
+      animate={{ scale: 1, opacity: 0 }}
+      transition={{ duration: 0.55, ease: "easeOut" }}
+      className="pointer-events-none absolute left-1/2 top-1/2 -ml-[80vmax] -mt-[80vmax] h-[160vmax] w-[160vmax] rounded-full will-change-transform"
+      style={{ background: "radial-gradient(circle, transparent 36%, rgba(0,80,255,0.22) 43%, rgba(34,211,238,0.38) 48%, rgba(0,102,255,0.2) 53%, transparent 60%)" }}
+    />
+  );
+}
+
+/** Status badge that slides up from under the card once the identity is accepted. */
+function HudBadge() {
+  return (
+    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ type: "spring", stiffness: 380, damping: 26 }} className="absolute left-1/2 top-full z-10 mt-4 -translate-x-1/2 whitespace-nowrap will-change-transform" role="status">
+      <span className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-zinc-950/90 px-4 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-blue-400 shadow-[0_0_24px_rgba(0,102,255,0.45)] [text-shadow:0_0_10px_rgba(96,165,250,0.8)] sm:text-xs">
+        <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_#60a5fa]" />
+        Identity verified • Access granted
+      </span>
     </motion.div>
   );
 }
@@ -159,7 +173,7 @@ export default function LoginPage() {
   const router = useRouter();
   const reduced = useReducedMotion();
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  /** Unlock sequence: "check" 0–400 ms, "verify" 400–900 ms, "out" 900–1200 ms. */
+  /** Unlock sequence: "check" 0–400 ms, "verify" 400–900 ms, "out" 900–1400 ms. */
   const [phase, setPhase] = useState<"idle" | "check" | "verify" | "out">("idle");
   const legalName = useSettings((s) => s.settings.profile.legalName);
   const security = useSettings((s) => s.settings.security);
@@ -199,8 +213,9 @@ export default function LoginPage() {
   }, []);
 
   /**
-   * Signed in: a 1.2 s unlock. 0–400 ms the button becomes a check mark; 400–900 ms the card settles back under a blue glow while
-   * "Access Verified" sweeps in; at 900 ms the screen fades and zooms forward as the portal opens (the navigation starts then).
+   * Signed in: a 1.4 s unlock. 0–400 ms the button becomes a glowing capsule with an unlock icon; 400–900 ms a shockwave sweeps
+   * out, the card lifts under a blue halo and "Identity verified" slides up; at 900 ms the screen warps forward and fades over
+   * 500 ms as the portal opens (the navigation starts then). Everything animates only transform, opacity and filter.
    */
   const enter = (who: Employee) => {
     setStage("launch");
@@ -280,14 +295,14 @@ export default function LoginPage() {
   const unlocking = phase === "verify" || phase === "out";
 
   return (
-    <motion.div animate={phase === "out" ? { opacity: 0, scale: 1.02 } : { opacity: 1, scale: 1 }} transition={{ duration: 0.3, ease: "easeIn" }} className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 py-14 sm:px-6">
+    <motion.div animate={phase === "out" ? { opacity: 0, scale: 1.1, filter: "blur(4px)" } : { opacity: 1, scale: 1, filter: "blur(0px)" }} transition={{ duration: 0.5, ease: "easeIn" }} className="relative flex will-change-transform min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 py-14 sm:px-6">
       <AmbientBackground lit={unlocking} />
 
       <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-5">
         <Utilities />
       </div>
 
-      <motion.div animate={unlocking ? { scale: 0.98 } : { scale: 1 }} transition={{ duration: 0.5, ease: "easeInOut" }} className="relative z-10 w-full max-w-[440px]">
+      <motion.div animate={unlocking ? { scale: 1.02 } : { scale: 1 }} transition={{ duration: 0.4, ease: "easeOut" }} className="relative z-10 w-full max-w-[440px] will-change-transform">
         {/* brand */}
         <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 260, damping: 24 }} className="mb-10 flex flex-col items-center text-center">
           <SplitLogo />
@@ -299,8 +314,9 @@ export default function LoginPage() {
 
         {/* floating glass card; the frosted pane stays put while its two faces turn */}
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 240, damping: 26, delay: 0.1 }} className="relative">
-          <AnimatePresence>{unlocking && <UnlockLine key="unlock" />}</AnimatePresence>
-          <div aria-hidden className="absolute inset-0 rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-[#0020B2]/10 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)]" />
+          {unlocking && <Shockwave />}
+          <AnimatePresence>{unlocking && <HudBadge key="hud" />}</AnimatePresence>
+          <div aria-hidden className={`absolute inset-0 rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-[#0020B2]/10 transition-shadow duration-500 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] ${unlocking ? "!shadow-[0_0_60px_rgba(0,102,255,0.4)] dark:!shadow-[0_0_60px_rgba(0,102,255,0.4)]" : ""}`} />
           <div aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#0050FF] to-transparent" />
           <div className="relative">
             <div data-view={view} className="[perspective:1000px]">
@@ -386,7 +402,7 @@ export default function LoginPage() {
           </div>
         </motion.div>
 
-        <p className="mt-8 px-4 text-center text-[12px] leading-5 text-slate-500 dark:text-slate-400">
+        <p className={`mt-8 px-4 text-center text-[12px] leading-5 text-slate-500 transition-opacity duration-300 dark:text-slate-400 ${unlocking ? "opacity-0" : ""}`}>
           Only employees registered in the directory can sign in.
           <br />© {new Date().getFullYear()} {legalName}
         </p>

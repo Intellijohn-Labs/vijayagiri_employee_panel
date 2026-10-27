@@ -2,7 +2,7 @@
 
 import { useId, type InputHTMLAttributes, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, LockOpen } from "lucide-react";
 import { useState } from "react";
 import { useSettings } from "@/store/settings-store";
 import { cn } from "@/lib/utils";
@@ -114,17 +114,20 @@ export function SubmitButton({ label, busyLabel = "Signing in…", loading, stag
         type="submit"
         disabled={loading || done}
         aria-label={done ? "Access verified" : undefined}
-        style={{ width: done ? 56 : "100%", borderRadius: done ? 28 : 8 }}
+        style={{ width: done ? 128 : "100%", borderRadius: done ? 24 : 8 }}
         className={cn(
           "group relative flex h-12 items-center justify-center gap-2 bg-[#0020B2] text-[15px] font-semibold text-white outline-none transition-[width,border-radius,box-shadow,background-color] duration-[400ms] ease-out hover:bg-[#0a2fcf] focus-visible:ring-4 focus-visible:ring-[#0020B2]/30 active:bg-[#001a94] disabled:cursor-default",
-          done ? "h-14 !bg-[#0020B2] shadow-[0_0_0_4px_rgba(0,80,255,0.2),0_0_36px_rgba(0,80,255,0.65)]" : loading && "cursor-wait opacity-90",
+          done ? "!bg-[#0020B2] will-change-transform shadow-[0_0_0_4px_rgba(0,80,255,0.2),0_0_36px_rgba(0,80,255,0.65)]" : loading && "cursor-wait opacity-90",
         )}
       >
         {done ? (
           <>
-            <motion.span aria-hidden className="absolute inset-0 rounded-full border-2 border-[#0050FF]" initial={{ scale: 1, opacity: 0.8 }} animate={{ scale: 1.9, opacity: 0 }} transition={{ duration: 0.8, repeat: 1, ease: "easeOut" }} />
+            <motion.span aria-hidden className="absolute inset-0 rounded-full border-2 border-[#0050FF]" initial={{ scale: 1, opacity: 0.8 }} animate={{ scale: 1.6, opacity: 0 }} transition={{ duration: 0.8, repeat: 1, ease: "easeOut" }} />
+            <motion.span aria-hidden className="relative" initial={{ x: -12, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.3, ease: "easeOut" }}>
+              <LockOpen className="h-5 w-5 drop-shadow-[0_0_8px_rgba(147,197,253,0.9)]" />
+            </motion.span>
             <svg viewBox="0 0 24 24" className="relative h-6 w-6" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3, delay: 0.12, ease: "easeOut" }} />
+              <motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3, delay: 0.2, ease: "easeOut" }} />
             </svg>
           </>
         ) : loading ? (
