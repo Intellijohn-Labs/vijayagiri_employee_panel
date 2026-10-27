@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CircleHelp, Mail, Moon, ShieldAlert, Sun, X } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useTheme } from "@/store/theme-store";
@@ -12,13 +12,13 @@ import { Popover } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/primitives";
 import { ActivationFlow } from "@/components/auth/activation";
 import { PasscodeStep } from "@/components/auth/passcode";
-import { PortalInit } from "@/components/auth/portal-init";
-import { AuthBackground, AuthField, BrandLogo, PasswordField, REVEAL, SubmitButton, linkCls, type AuthStage } from "@/components/auth/auth-ui";
+import { BrandShowcase } from "@/components/auth/brand-showcase";
+import { AuthField, BrandLogo, PasswordField, SubmitButton, linkCls, stepMotion, type AuthStage } from "@/components/auth/auth-ui";
 import { useSettings } from "@/store/settings-store";
 import { forgotPassword, loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
 import { ACCESS_DENIED, authenticate, useEmployees, type Employee } from "@/store/employee-store";
 
-const utilityBtn = "grid h-9 w-9 place-items-center rounded-full border border-slate-300/80 bg-white/70 text-slate-600 outline-none backdrop-blur transition-all duration-200 hover:scale-105 hover:bg-white hover:text-[#003399] focus-visible:ring-2 focus-visible:ring-sky-400 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white";
+const utilityBtn = "grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 outline-none transition-colors hover:text-[#0020B2] focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white";
 
 /** Theme toggle and help. */
 function Utilities() {
@@ -27,17 +27,13 @@ function Utilities() {
   return (
     <div className="flex items-center gap-1.5">
       <button type="button" onClick={toggle} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} className={utilityBtn}>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span key={theme} initial={{ rotate: -60, opacity: 0, scale: 0.6 }} animate={{ rotate: 0, opacity: 1, scale: 1 }} exit={{ rotate: 60, opacity: 0, scale: 0.6 }} transition={{ duration: 0.18 }}>
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </motion.span>
-        </AnimatePresence>
+        {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
       <Popover
         align="end"
         width={300}
         trigger={({ toggle: t }) => (
-          <button onClick={t} aria-label="Help" className={utilityBtn}>
+          <button type="button" onClick={t} aria-label="Help" className={utilityBtn}>
             <CircleHelp className="h-4 w-4" />
           </button>
         )}
@@ -45,8 +41,8 @@ function Utilities() {
         {() => (
           <div className="space-y-2 p-3 text-[12.5px] leading-5 text-muted">
             <p className="text-[13px] font-semibold text-fg">Need a hand signing in?</p>
-            <p>Sign in with the official email address (or employee ID) registered for you in the Employee Directory.</p>
-            <p>First time here? Choose “Activate your account” and set a password. Your Admin must have added your email first.</p>
+            <p>Sign in with the official email address or mobile number registered for you in the Employee Directory.</p>
+            <p>First time here? Choose “Activate your account” and set a password. Your Admin must have added your email and phone first.</p>
             <p className="rounded-md bg-tint px-2.5 py-2 text-accent-text">Locked out? Contact Central Admin at Head Office: {branchById(HQ_ID)?.manager} · {branchById(HQ_ID)?.phone.split(" / ")[0]}</p>
           </div>
         )}
@@ -65,8 +61,6 @@ const mobileOk = (v: string) => {
 
 type Notice = { tone: "error" | "warn"; title: string; text: string };
 
-const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.35 } } };
-const item = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: REVEAL } };
 
 /** Dismissible banner for lockouts and other problems that aren't about one field. */
 function NoticeBanner({ notice, onDismiss }: { notice: Notice; onDismiss: () => void }) {
@@ -96,7 +90,6 @@ function NoticeBanner({ notice, onDismiss }: { notice: Notice; onDismiss: () => 
 
 export default function LoginPage() {
   const router = useRouter();
-  const shake = useAnimationControls();
   const legalName = useSettings((s) => s.settings.profile.legalName);
   const security = useSettings((s) => s.settings.security);
 
@@ -110,8 +103,6 @@ export default function LoginPage() {
   const [stage, setStage] = useState<AuthStage>("idle");
   // Set while an Admin must still enter the passcode from Settings → Security.
   const [gate, setGate] = useState<Employee | null>(null);
-  /** Set once sign-in succeeded: shows the start-up sequence for this employee. */
-  const [welcome, setWelcome] = useState<Employee | null>(null);
 
   useEffect(() => {
     const saved = loadRemembered();
@@ -124,21 +115,14 @@ export default function LoginPage() {
     }
   }, []);
 
-  const wiggle = () => void shake.start({ x: [0, -12, 11, -9, 7, -4, 2, 0], transition: { duration: 0.5, ease: "easeInOut" } });
-
-  /** Signed in: the card steps back and the 3-second start-up sequence runs; when it ends the portal opens for this employee. */
+  /** Signed in: open the portal straight away. The button keeps its spinner until the next page takes over. */
   const enter = (who: Employee) => {
     setStage("launch");
-    setWelcome(who);
-  };
-
-  /** Called by the start-up sequence at its 3.0 s mark. */
-  const openPortal = (who: Employee) => {
     // Central admins start on the whole network; someone limited to one showroom lands on that showroom.
     const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
     useEmployees.getState().signIn(who);
     useApp.getState().setBranchScope(scope, { silent: true });
-    router.push("/branches");
+    router.push("/");
   };
 
   const submit = async () => {
@@ -150,7 +134,7 @@ export default function LoginPage() {
     if (!password) e.password = "Enter your password";
     setErrors(e);
     setNotice(null);
-    if (Object.keys(e).length) return wiggle();
+    if (Object.keys(e).length) return;
     setChecking(true);
     try {
       // Strict: only an Active, activated employee in the directory who knows the password gets in.
@@ -158,13 +142,12 @@ export default function LoginPage() {
       if (!auth.ok) {
         if (auth.reason === "locked") setNotice({ tone: "warn", title: "Too many failed attempts", text: ACCESS_DENIED.locked });
         else setErrors(auth.reason === "wrong-password" ? { password: ACCESS_DENIED[auth.reason] } : { email: ACCESS_DENIED[auth.reason] });
-        return wiggle();
+        return;
       }
       saveRemembered(remember ? email.trim() : null);
       proceed(auth.employee);
     } catch (err) {
       setNotice({ tone: "error", title: "Couldn't sign you in", text: err instanceof Error ? err.message : "Couldn't reach the server. Please try again." });
-      wiggle();
     } finally {
       setChecking(false);
     }
@@ -188,39 +171,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 py-12 sm:px-6">
-      <AuthBackground />
-      {welcome && <PortalInit name={welcome.name} onDone={() => openPortal(welcome)} />}
+    <div className="grid min-h-[100dvh] lg:grid-cols-2">
+      <BrandShowcase />
 
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-5">
-        <Utilities />
-      </div>
-
-      <motion.div
-        animate={stage === "launch" ? { scale: 1.05, opacity: 0, filter: "blur(8px)", y: -12 } : { scale: 1, opacity: 1, filter: "blur(0px)", y: 0 }}
-        transition={{ duration: 0.5, ease: "easeIn" }}
-        className="relative z-10 w-full max-w-[440px]"
-      >
-        {/* brand */}
-        <div className="mb-7 flex flex-col items-center text-center">
-          <motion.div initial={{ opacity: 0, y: -14, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ ...REVEAL, delay: 0.05 }}>
-            <BrandLogo />
-          </motion.div>
-          <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...REVEAL, delay: 0.18 }} className="mt-4 text-[11px] font-semibold uppercase tracking-[0.32em] text-[#0a47b8] dark:text-sky-300">
-            Operations Hub &amp; Claim Management
-          </motion.p>
+      <main className="relative flex flex-col bg-white dark:bg-[#0E1219]">
+        <div className="flex justify-end p-4 sm:p-6">
+          <Utilities />
         </div>
 
-        {/* card */}
-        <motion.div animate={shake}>
-          <motion.div
-            initial={{ opacity: 0, y: 28, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ ...REVEAL, delay: 0.12 }}
-            className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-[0_30px_80px_-30px_rgba(0,51,153,0.35)] backdrop-blur-xl sm:p-8 dark:border-white/10 dark:bg-white/[0.045] dark:shadow-[0_30px_90px_-30px_rgba(0,71,171,0.65)]"
-          >
-            <div aria-hidden className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-sky-400/70 to-transparent" />
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl dark:bg-sky-400/10" />
+        <div className="flex flex-1 items-center justify-center px-6 pb-12 sm:px-10">
+          <div className="w-full max-w-[400px]">
+            {/* on phones and tablets the showcase is hidden, so the logo leads */}
+            <div className="mb-10 lg:hidden">
+              <BrandLogo />
+            </div>
 
             <AnimatePresence mode="wait" initial={false}>
               {gate ? (
@@ -230,83 +194,75 @@ export default function LoginPage() {
               ) : (
                 <motion.form
                   key="signin"
-                  variants={stagger}
-                  initial="hidden"
-                  animate="show"
-                  exit={{ opacity: 0, y: -8, transition: { duration: 0.12 } }}
+                  {...stepMotion}
                   noValidate
                   onSubmit={(e) => {
                     e.preventDefault();
                     void submit();
                   }}
-                  className="relative"
                 >
-                  <motion.div variants={item} className="mb-6">
-                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Welcome back</h1>
-                    <p className="mt-1 text-[13.5px] text-slate-600 dark:text-slate-400">Sign in to your Vijayagiri workspace.</p>
-                  </motion.div>
+                  <h1 className="text-[26px] font-semibold leading-8 tracking-tight text-slate-900 dark:text-white">Sign in to Vijayagiri Workspace</h1>
+                  <p className="mt-2 text-[14px] leading-6 text-slate-500 dark:text-slate-400">Enter your registered credentials to access claims and inventory.</p>
 
-                  <AnimatePresence initial={false}>{notice && <NoticeBanner key="notice" notice={notice} onDismiss={() => setNotice(null)} />}</AnimatePresence>
-
-                  <div className="space-y-4">
-                    <motion.div variants={item}>
-                      <AuthField
-                        label="Work email or mobile number"
-                        icon={<Mail className="h-[18px] w-[18px]" />}
-                        autoFocus
-                        autoComplete="username"
-                        spellCheck={false}
-                        value={email}
-                        onChange={(v) => {
-                          setEmail(v);
-                          setErrors((x) => ({ ...x, email: "" }));
-                        }}
-                        error={errors.email}
-                      />
-                    </motion.div>
-
-                    <motion.div variants={item}>
-                      <PasswordField
-                        value={password}
-                        onChange={(v) => {
-                          setPassword(v);
-                          setErrors((x) => ({ ...x, password: "" }));
-                        }}
-                        error={errors.password}
-                      />
-                    </motion.div>
+                  <div className="mt-8">
+                    <AnimatePresence initial={false}>{notice && <NoticeBanner key="notice" notice={notice} onDismiss={() => setNotice(null)} />}</AnimatePresence>
                   </div>
 
-                  <motion.div variants={item} className="flex items-center justify-between pb-5 pt-4">
-                    <label className="flex cursor-pointer select-none items-center gap-2 text-[13px] text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+                  <div className="space-y-5">
+                    <AuthField
+                      label="Work email or mobile number"
+                      icon={<Mail className="h-[18px] w-[18px]" />}
+                      autoFocus
+                      autoComplete="username"
+                      spellCheck={false}
+                      placeholder="name@vijayagiri.in or 98470 12345"
+                      value={email}
+                      onChange={(v) => {
+                        setEmail(v);
+                        setErrors((x) => ({ ...x, email: "" }));
+                      }}
+                      error={errors.email}
+                    />
+                    <PasswordField
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(v) => {
+                        setPassword(v);
+                        setErrors((x) => ({ ...x, password: "" }));
+                      }}
+                      error={errors.password}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pb-6 pt-4">
+                    <label className="flex cursor-pointer select-none items-center gap-2 text-[13px] text-slate-600 dark:text-slate-400">
                       <Checkbox checked={remember} onChange={setRemember} label="Remember me" />
                       Remember me
                     </label>
                     <button type="button" onClick={() => forgotPassword(email)} className={`${linkCls} -my-2`}>
                       Forgot password?
                     </button>
-                  </motion.div>
+                  </div>
 
-                  <motion.div variants={item}>
-                    <SubmitButton label="Sign in" loading={checking} stage={stage} />
-                  </motion.div>
+                  <SubmitButton label="Sign In" loading={checking} stage={stage} />
 
-                  <motion.div variants={item} className="mt-5 border-t border-slate-200/80 pt-4 text-center dark:border-white/10">
-                    <button type="button" onClick={() => switchMode("activate")} disabled={stage !== "idle"} className="group inline-flex items-center gap-1.5 rounded py-1.5 text-[13px] text-slate-600 outline-none transition-colors hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-sky-400/60 disabled:opacity-50 dark:text-slate-400 dark:hover:text-white">
-                      New employee? <span className="font-semibold text-sky-700 underline-offset-4 group-hover:underline dark:text-sky-300">Activate your account</span>
+                  <p className="mt-6 text-center text-[13px] text-slate-500 dark:text-slate-400">
+                    New employee?{" "}
+                    <button type="button" onClick={() => switchMode("activate")} disabled={stage !== "idle"} className="rounded font-semibold text-[#0020B2] underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 disabled:opacity-50 dark:text-sky-300">
+                      Activate your account
                     </button>
-                  </motion.div>
+                  </p>
                 </motion.form>
               )}
             </AnimatePresence>
-          </motion.div>
-        </motion.div>
 
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="mt-6 px-4 text-center text-[11.5px] leading-5 text-slate-500 dark:text-slate-400">
-          Only employees registered in the directory can sign in.
-          <br />© {new Date().getFullYear()} {legalName}
-        </motion.p>
-      </motion.div>
+            <p className="mt-10 text-center text-[12px] leading-5 text-slate-400 dark:text-slate-500">
+              Only employees registered in the directory can sign in.
+              <br />© {new Date().getFullYear()} {legalName}
+            </p>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
