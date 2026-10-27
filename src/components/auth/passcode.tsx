@@ -5,14 +5,13 @@ import { motion } from "framer-motion";
 import { ArrowLeft, KeyRound } from "lucide-react";
 import { hashPassword, type Employee } from "@/store/employee-store";
 import { useSettings } from "@/store/settings-store";
-import { LaunchButton, REVEAL, TelemetryField, telemetryInputCls, type LaunchStage } from "./cockpit";
-import { cn } from "@/lib/utils";
+import { AuthField, SubmitButton, linkCls, stepMotion, type AuthStage } from "./auth-ui";
 
 /** Salt used for the Admin passcode hash (kept in one place so Settings and sign-in agree). */
 export const PASSCODE_SALT = "admin-passcode";
 
 /** Second step for Admins when the passcode is switched on in Settings → Security. */
-export function PasscodeStep({ who, stage, onType, onVerified, onBack }: { who: Employee; stage: LaunchStage; onType: (chars: number) => void; onVerified: (e: Employee) => void; onBack: () => void }) {
+export function PasscodeStep({ who, stage, onVerified, onBack }: { who: Employee; stage: AuthStage; onVerified: (e: Employee) => void; onBack: () => void }) {
   const hash = useSettings((s) => s.settings.security.passcodeHash);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -39,44 +38,39 @@ export function PasscodeStep({ who, stage, onType, onVerified, onBack }: { who: 
 
   return (
     <motion.form
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0, transition: REVEAL }}
-      exit={{ opacity: 0, y: -10, transition: { duration: 0.12 } }}
+      {...stepMotion}
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
         void verify();
       }}
-      className="mt-5 space-y-4"
+      className="space-y-4"
     >
       <div>
-        <p className="text-[15px] font-bold tracking-tight text-slate-900 dark:text-white">Admin passcode</p>
-        <p className="mt-1 text-[12.5px] leading-5 text-slate-600 dark:text-slate-400">Welcome back, {who.name.split(" ")[0]}. Admin accounts need the passcode set in Settings before they can continue.</p>
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Admin passcode</h2>
+        <p className="mt-1 text-[13px] leading-5 text-slate-600 dark:text-slate-400">Welcome back, {who.name.split(" ")[0]}. Admin accounts need the passcode set in Settings before they can continue.</p>
       </div>
-      <TelemetryField label="Passcode" icon={<KeyRound className="h-4 w-4" />} error={error}>
-        <input
-          autoFocus
-          type="password"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          value={code}
-          maxLength={8}
-          onChange={(e) => {
-            const v = e.target.value.replace(/\D/g, "");
-            setCode(v);
-            setError("");
-            onType(v.length);
-          }}
-          placeholder="••••••"
-          aria-invalid={!!error}
-          className={cn(telemetryInputCls, "tracking-[0.4em]", error && "!border-red-500")}
-        />
-      </TelemetryField>
-      <LaunchButton stage={stage} label="VERIFY & SIGN IN" />
+      <AuthField
+        label="Passcode"
+        icon={<KeyRound className="h-[18px] w-[18px]" />}
+        type="password"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        autoFocus
+        maxLength={8}
+        className="tracking-[0.35em]"
+        value={code}
+        onChange={(v) => {
+          setCode(v.replace(/\D/g, ""));
+          setError("");
+        }}
+        error={error}
+      />
+      <SubmitButton label="Verify & sign in" busyLabel="Checking…" loading={busy} stage={stage} />
       <div className="flex justify-center">
-        <button type="button" onClick={onBack} disabled={stage !== "idle"} className="inline-flex items-center gap-1.5 rounded py-2 text-[12px] font-medium tracking-wide text-sky-700 underline-offset-4 outline-none hover:underline focus-visible:underline disabled:opacity-50 dark:text-sky-300">
+        <button type="button" onClick={onBack} disabled={stage !== "idle"} className={`${linkCls} inline-flex items-center gap-1.5 disabled:opacity-50`}>
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Sign In
+          Back to sign in
         </button>
       </div>
     </motion.form>
