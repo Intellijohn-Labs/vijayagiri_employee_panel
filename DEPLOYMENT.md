@@ -64,7 +64,7 @@ cd vijayagiri_employee_panel
 npm install
 npm run build
 
-PORT=3006 HOSTNAME=0.0.0.0 pm2 start npm --name "yamaha-portal" -- start
+pm2 start ecosystem.config.js
 ```
 
 Auto-restart on reboot (run the command `pm2 startup` prints, then save):
@@ -116,5 +116,5 @@ sudo certbot --nginx -d portal.vijayagiriyamaha.com
 
 ```bash
 cd ~/vijayagiri_employee_panel
-git pull origin main && npm install && npm run build && pm2 restart yamaha-portal
+git pull origin main && npm install && npm run build && pm2 restart vijayagiri-employee
 ```
