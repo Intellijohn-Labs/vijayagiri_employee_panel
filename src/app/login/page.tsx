@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CircleHelp, Mail, Moon, ShieldAlert, Sun, X } from "lucide-react";
@@ -98,7 +98,10 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [mode, setMode] = useState<"signin" | "activate">("signin");
+  /** True while the card shows its back: Activate your account. */
+  const [isFlipped, setIsFlipped] = useState(false);
+  const front = useRef<HTMLDivElement>(null);
+  const back = useRef<HTMLDivElement>(null);
   const [checking, setChecking] = useState(false);
   const [stage, setStage] = useState<AuthStage>("idle");
   // Set while an Admin must still enter the passcode from Settings → Security.
@@ -163,12 +166,18 @@ export default function LoginPage() {
     enter(who);
   };
 
-  const switchMode = (next: "signin" | "activate") => {
+  const flipTo = (flipped: boolean) => {
     if (stage !== "idle") return;
     setErrors({});
     setNotice(null);
-    setMode(next);
+    setIsFlipped(flipped);
   };
+
+  // Once the card has turned, put the cursor in the first field of the side now facing the user.
+  useEffect(() => {
+    const t = setTimeout(() => (isFlipped ? back : front).current?.querySelector("input")?.focus({ preventScroll: true }), 420);
+    return () => clearTimeout(t);
+  }, [isFlipped]);
 
   return (
     <div className="grid min-h-[100dvh] lg:grid-cols-2">
@@ -186,15 +195,16 @@ export default function LoginPage() {
               <BrandLogo />
             </div>
 
-            <AnimatePresence mode="wait" initial={false}>
-              {gate ? (
-                <PasscodeStep key="passcode" who={gate} stage={stage} onVerified={enter} onBack={() => setGate(null)} />
-              ) : mode === "activate" ? (
-                <ActivationFlow key="activate" stage={stage} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => switchMode("signin")} onActivated={enter} />
-              ) : (
-                <motion.form
-                  key="signin"
-                  {...stepMotion}
+            {/* The card: Sign in on the front, Activate your account on the back. */}
+            <div className="[perspective:1000px]">
+              <div className={`grid [transform-style:preserve-3d] transition-transform duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${isFlipped ? "[transform:rotateY(180deg)]" : ""}`}>
+                <div ref={front} inert={isFlipped} aria-hidden={isFlipped} className="[backface-visibility:hidden] [grid-area:1/1]">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {gate ? (
+                      <PasscodeStep key="passcode" who={gate} stage={stage} onVerified={enter} onBack={() => setGate(null)} />
+                    ) : (
+                      <motion.div key="signin" {...stepMotion}>
+                        <form
                   noValidate
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -248,13 +258,20 @@ export default function LoginPage() {
 
                   <p className="mt-6 text-center text-[13px] text-slate-500 dark:text-slate-400">
                     New employee?{" "}
-                    <button type="button" onClick={() => switchMode("activate")} disabled={stage !== "idle"} className="rounded font-semibold text-[#0020B2] underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 disabled:opacity-50 dark:text-sky-300">
+                    <button type="button" onClick={() => flipTo(true)} disabled={stage !== "idle"} className="rounded font-semibold text-[#0020B2] underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[#0020B2]/40 disabled:opacity-50 dark:text-sky-300">
                       Activate your account
                     </button>
                   </p>
-                </motion.form>
-              )}
-            </AnimatePresence>
+                </form>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <div ref={back} inert={!isFlipped} aria-hidden={!isFlipped} className="[backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]">
+                  <ActivationFlow stage={stage} active={isFlipped} initialEmail={email.includes("@") ? email.trim() : ""} onBack={() => flipTo(false)} onActivated={enter} />
+                </div>
+              </div>
+            </div>
 
             <p className="mt-10 text-center text-[12px] leading-5 text-slate-400 dark:text-slate-500">
               Only employees registered in the directory can sign in.
