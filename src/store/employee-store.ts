@@ -118,10 +118,10 @@ export type { AuthResult, ActivationCheck };
 export const authenticate = (identifier: string, password: string): Promise<AuthResult> => signInAction(identifier, password);
 
 /** Step 1 of account activation: only an email an Admin already added to the directory may continue. */
-export const checkInvite = (email: string): Promise<ActivationCheck> => checkInviteAction(email);
+export const checkInvite = (email: string, phone: string): Promise<ActivationCheck> => checkInviteAction(email, phone);
 
 /** Step 2: store the chosen password against the invited employee and sign them in; null if the invite is no longer valid. */
-export const activateAccount = (email: string, password: string): Promise<Employee | null> => activateAccountAction(email, password);
+export const activateAccount = (email: string, phone: string, password: string): Promise<Employee | null> => activateAccountAction(email, phone, password);
 
 export const ACCESS_DENIED = {
   "not-found": "Access Denied: This email is not registered in the Vijayagiri Employee Directory. Contact Admin.",
@@ -133,8 +133,8 @@ export const ACCESS_DENIED = {
 
 /** Shown on the activation screen — worded for someone who may have mistyped the address. */
 export const ACTIVATION_DENIED = {
-  "not-found": "Access Denied: This email is not registered in the employee directory. Please contact your Admin to get invited.",
-  inactive: "Access Denied: This employee account is inactive. Please contact your Admin.",
+  "not-found": "Details not found in Vijayagiri Employee Directory. Contact Admin.",
+  locked: "Too many failed attempts. Please wait 15 minutes and try again.",
   "already-active": "Account already active. Please sign in with your password, or use 'Forgot password' to reset.",
 } as const;
 

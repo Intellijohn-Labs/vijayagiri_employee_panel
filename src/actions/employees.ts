@@ -12,7 +12,7 @@ import { EMPLOYEE_ROLES, ROOT_ONLY_MESSAGE, ROOT_PROTECTED_MESSAGE, isRootEmail,
 
 export type EmployeeResult = { ok: true; employee: Employee } | { ok: false; error: string };
 export type AuthResult = { ok: true; employee: Employee } | { ok: false; reason: "not-found" | "inactive" | "not-activated" | "wrong-password" | "locked" };
-export type ActivationCheck = { ok: true; employee: Employee } | { ok: false; reason: "not-found" | "inactive" | "already-active" };
+export type ActivationCheck = { ok: true; employee: Employee } | { ok: false; reason: "not-found" | "already-active" | "locked" };
 
 const toEmployee = (r: Row): Employee => ({
   id: r.id,
@@ -85,24 +85,36 @@ export async function signInAction(identifier: string, password: string): Promis
   return { ok: true, employee: toEmployee(row) };
 }
 
-/** Step 1 of activation: only an email an Admin already added may continue. */
-export async function checkInviteAction(email: string): Promise<ActivationCheck> {
+/** Last 10 digits, so "+91 98470 10001", "9847010001" and "098470-10001" all compare equal. */
+const phoneKey = (p: string) => digits(p).slice(-10);
+
+/**
+ * Step 1 of activation. There is no open sign-up: the email AND phone number must both match a record an Admin created,
+ * and the account must be Active and not yet activated. Every other outcome (no such record, wrong phone, inactive account)
+ * answers the same way, so nobody can use this to find out who is in the directory.
+ */
+export async function checkInviteAction(email: string, phone: string): Promise<ActivationCheck> {
   await ensureSeeded(prisma);
+  const key = `activate:${norm(email)}`;
+  if (locked(key)) return { ok: false, reason: "locked" };
   const row = email.trim() ? await prisma.employee.findFirst({ where: { email: { equals: email.trim(), mode: "insensitive" } } }) : null;
-  if (!row) return { ok: false, reason: "not-found" };
-  if (!row.isActive) return { ok: false, reason: "inactive" };
+  if (!row || phoneKey(phone).length !== 10 || phoneKey(row.phone) !== phoneKey(phone) || !row.isActive) {
+    failed(key);
+    return { ok: false, reason: "not-found" };
+  }
   if (row.password) return { ok: false, reason: "already-active" };
   return { ok: true, employee: toEmployee(row) };
 }
 
-/** Step 2: store the chosen password against the invited employee, then sign them in. Re-checks the invite, so it can't overwrite an active account. */
-export async function activateAccountAction(email: string, password: string): Promise<Employee | null> {
+/** Step 2: store the chosen password (scrypt) against the pre-approved employee, then sign them in. Re-checks everything, so it can't overwrite an active account. */
+export async function activateAccountAction(email: string, phone: string, password: string): Promise<Employee | null> {
   if (password.length < 8) return null;
-  const check = await checkInviteAction(email);
+  const check = await checkInviteAction(email, phone);
   if (!check.ok) return null;
   const { count } = await prisma.employee.updateMany({ where: { id: check.employee.id, isActive: true, password: null }, data: { password: await hashPassword(password) } });
   if (!count) return null;
   await startSession({ id: check.employee.id, email: check.employee.email });
+  await logAudit({ action: "ACCOUNT_ACTIVATED", entity: "Employee", entityId: check.employee.id, actor: { email: check.employee.email, name: check.employee.name } });
   return { ...check.employee, activated: true };
 }
 

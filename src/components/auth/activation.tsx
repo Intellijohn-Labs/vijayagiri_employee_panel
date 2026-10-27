@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, BadgeCheck, MailCheck } from "lucide-react";
+import { ArrowLeft, BadgeCheck, MailCheck, Phone } from "lucide-react";
 import { toast } from "@/store/toast-store";
 import { useBranchTools } from "@/store/branch-store";
 import { ACTIVATION_DENIED, activateAccount, checkInvite, type Employee } from "@/store/employee-store";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 export function ActivationFlow({ stage, initialEmail, onBack, onActivated }: { stage: AuthStage; initialEmail: string; onBack: () => void; onActivated: (e: Employee) => void }) {
   const { byId } = useBranchTools();
   const [email, setEmail] = useState(initialEmail);
+  const [phone, setPhone] = useState("");
   const [invited, setInvited] = useState<Employee | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -26,12 +27,15 @@ export function ActivationFlow({ stage, initialEmail, onBack, onActivated }: { s
 
   const verify = async () => {
     if (working) return;
-    if (!email.trim()) return setErrors({ email: "Enter the work email your Admin registered for you" });
+    const e: Record<string, string> = {};
+    if (!email.trim()) e.email = "Enter the work email your Admin registered for you";
+    if (phone.replace(/\D/g, "").length < 10) e.phone = "Enter the 10-digit phone number your Admin registered for you";
+    if (Object.keys(e).length) return setErrors(e);
     setWorking(true);
-    const check = await checkInvite(email).catch(() => null);
+    const check = await checkInvite(email, phone).catch(() => null);
     setWorking(false);
     if (!check) return setErrors({ email: "Couldn't reach the server. Please try again." });
-    if (!check.ok) return setErrors({ email: ACTIVATION_DENIED[check.reason] });
+    if (!check.ok) return setErrors({ form: ACTIVATION_DENIED[check.reason] });
     setErrors({});
     setPassword("");
     setConfirm("");
@@ -48,12 +52,12 @@ export function ActivationFlow({ stage, initialEmail, onBack, onActivated }: { s
     if (Object.keys(e).length) return;
     setWorking(true);
     try {
-      const done = await activateAccount(email, password);
+      const done = await activateAccount(email, phone, password);
       if (!done) {
         // Someone (or another tab) activated or deactivated the account since the email was verified.
         setInvited(null);
-        const again = await checkInvite(email);
-        setErrors({ email: again.ok ? "Something went wrong. Please verify your email again." : ACTIVATION_DENIED[again.reason] });
+        const again = await checkInvite(email, phone);
+        setErrors({ form: again.ok ? "Something went wrong. Please verify your details again." : ACTIVATION_DENIED[again.reason] });
         return;
       }
       toast.success("Account activated", "Your password is saved. Signing you in…");
@@ -83,7 +87,7 @@ export function ActivationFlow({ stage, initialEmail, onBack, onActivated }: { s
           >
             <div>
               <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Activate your account</h2>
-              <p className="mt-1 text-[13px] leading-5 text-slate-600 dark:text-slate-400">Enter the work email your Admin added to the employee directory. Only pre-approved employees can set a password.</p>
+              <p className="mt-1 text-[13px] leading-5 text-slate-600 dark:text-slate-400">Enter the work email and phone number your Admin registered for you. Only pre-approved employees can set a password.</p>
             </div>
             <AuthField
               label="Official work email"
@@ -99,7 +103,25 @@ export function ActivationFlow({ stage, initialEmail, onBack, onActivated }: { s
               }}
               error={errors.email}
             />
-            <SubmitButton label="Verify email" busyLabel="Checking…" loading={working} stage={stage} />
+            <AuthField
+              label="Registered phone number"
+              icon={<Phone className="h-[18px] w-[18px]" />}
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(v) => {
+                setPhone(v);
+                setErrors({});
+              }}
+              error={errors.phone}
+            />
+            {errors.form && (
+              <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12.5px] font-medium text-red-700 dark:text-red-300">
+                {errors.form}
+              </p>
+            )}
+            <SubmitButton label="Verify details" busyLabel="Checking…" loading={working} stage={stage} />
           </motion.form>
         ) : (
           <motion.form
