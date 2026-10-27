@@ -124,7 +124,7 @@ export const checkInvite = (email: string, phone: string): Promise<ActivationChe
 export const activateAccount = (email: string, phone: string, password: string): Promise<Employee | null> => activateAccountAction(email, phone, password);
 
 export const ACCESS_DENIED = {
-  "not-found": "Access Denied: This email is not registered in the Vijayagiri Employee Directory. Contact Admin.",
+  "not-found": "Access Denied: These details are not registered in the Vijayagiri Employee Directory. Contact Admin.",
   inactive: "Access Denied: This employee account is inactive. Contact Admin.",
   "not-activated": "This account hasn't been activated yet. Choose “New employee? Activate your account” to set your password.",
   "wrong-password": "Incorrect password. Try again, or use “Forgot password?”.",

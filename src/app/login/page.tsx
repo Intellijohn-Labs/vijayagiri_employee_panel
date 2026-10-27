@@ -56,6 +56,14 @@ function Utilities() {
   );
 }
 
+/** A mobile number typed any usual way: +91 / 0 prefix, spaces, dashes or brackets, ending up as 10 digits. */
+const mobileOk = (v: string) => {
+  let d = v.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d.length === 10;
+};
+
 type Notice = { tone: "error" | "warn"; title: string; text: string };
 
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.35 } } };
@@ -138,7 +146,9 @@ export default function LoginPage() {
   const submit = async () => {
     if (stage !== "idle" || checking) return;
     const e: Record<string, string> = {};
-    if (!email.trim()) e.email = "Enter your work email or employee ID";
+    const id = email.trim();
+    if (!id) e.email = "Enter your work email or mobile number";
+    else if (id.includes("@") ? !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(id) : /^[\d\s\-()+]+$/.test(id) && !mobileOk(id)) e.email = id.includes("@") ? "Enter a valid email address" : "Enter a valid 10-digit mobile number";
     if (!password) e.password = "Enter your password";
     setErrors(e);
     setNotice(null);
@@ -242,7 +252,7 @@ export default function LoginPage() {
                   <div className="space-y-4">
                     <motion.div variants={item}>
                       <AuthField
-                        label="Work email or employee ID"
+                        label="Work email or mobile number"
                         icon={<Mail className="h-[18px] w-[18px]" />}
                         autoFocus
                         autoComplete="username"

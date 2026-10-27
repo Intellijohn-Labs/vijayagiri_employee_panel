@@ -34,7 +34,24 @@ const digits = (s: string) => s.replace(/\D/g, "");
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const NOT_ADMIN = "Unauthorized: Only Admins can manage employees.";
 
-const byIdentifier = (identifier: string) => prisma.employee.findFirst({ where: { OR: [{ email: { equals: identifier.trim(), mode: "insensitive" } }, { code: { equals: identifier.trim(), mode: "insensitive" } }] } });
+/**
+ * A mobile number typed any way ("+91 98470-10001", "(0)9847010001", "98470 10001") as its 10 digits, or null if the text
+ * isn't a phone number at all (an email or an employee code has letters or "@" in it).
+ */
+const asMobile = (identifier: string): string | null => {
+  if (!/^[\d\s\-()+]+$/.test(identifier.trim())) return null;
+  let d = digits(identifier);
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d.length === 10 ? d : null;
+};
+
+/** The employee an email, employee code or mobile number belongs to. Phones are stored in display form, so they are compared by their digits. */
+const byIdentifier = async (identifier: string) => {
+  const mobile = asMobile(identifier);
+  if (mobile) return (await prisma.employee.findMany()).find((e) => phoneKey(e.phone) === mobile) ?? null;
+  return prisma.employee.findFirst({ where: { OR: [{ email: { equals: identifier.trim(), mode: "insensitive" } }, { code: { equals: identifier.trim(), mode: "insensitive" } }] } });
+};
 
 /** Failed sign-ins per identifier, so a password can't be guessed by brute force. */
 const failures = new Map<string, { n: number; first: number }>();
@@ -65,7 +82,7 @@ export async function signOutAction() {
 /** Strict: only an Active, activated employee in the directory who knows the password gets a session. */
 export async function signInAction(identifier: string, password: string): Promise<AuthResult> {
   await ensureSeeded(prisma);
-  const key = norm(identifier);
+  const key = asMobile(identifier) ?? norm(identifier);
   if (locked(key)) {
     await logAudit({ action: "AUTH_LOCKED", entity: "Auth", actor: { email: key, name: "Unknown" }, details: { identifier: key } });
     return { ok: false, reason: "locked" };
