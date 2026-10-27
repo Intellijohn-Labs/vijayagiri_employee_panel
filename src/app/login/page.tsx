@@ -83,6 +83,60 @@ function NoticeBanner({ notice, onDismiss }: { notice: Notice; onDismiss: () => 
   );
 }
 
+const clockFormat = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+/** How far each half of the logo slides apart, in px: enough to leave room for the clock between them. */
+const SPLIT = 56;
+
+/**
+ * The logo, cut down the middle. Tapping it slides the halves apart to show a live digital clock in the gap; after 3 seconds
+ * they slide back together. Kept in its own component so the ticking clock re-renders only this, not the sign-in form.
+ */
+function SplitLogo() {
+  const [showClock, setShowClock] = useState(false);
+  const [time, setTime] = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // While the clock is open it ticks every second.
+  useEffect(() => {
+    if (!showClock) return;
+    const tick = () => setTime(clockFormat.format(new Date()));
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [showClock]);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const reveal = () => {
+    setTime(clockFormat.format(new Date()));
+    setShowClock(true);
+    // Tapping again while it is open just restarts the 3 seconds.
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setShowClock(false), 3000);
+  };
+
+  const half = "block transition-all duration-500 ease-out motion-reduce:transition-none";
+  return (
+    <button type="button" onClick={reveal} aria-label="Vijayagiri — tap to show the time" className="relative block w-fit rounded-md outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60">
+      <span className="relative block">
+        <span className={half} style={{ clipPath: "inset(0 50% 0 0)", transform: showClock ? `translateX(-${SPLIT}px)` : "translateX(0)" }}>
+          <BrandLogo onDark className="w-[210px] sm:w-[240px]" />
+        </span>
+        <span aria-hidden className={`${half} absolute inset-0`} style={{ clipPath: "inset(0 0 0 50%)", transform: showClock ? `translateX(${SPLIT}px)` : "translateX(0)" }}>
+          <BrandLogo onDark className="w-[210px] sm:w-[240px]" />
+        </span>
+        <span role="timer" aria-hidden={!showClock} className="pointer-events-none absolute inset-0 grid place-items-center whitespace-nowrap font-mono text-sm font-bold tracking-widest text-cyan-300 transition-opacity duration-500 ease-out [text-shadow:0_0_14px_rgba(34,211,238,0.85),0_0_28px_rgba(0,80,255,0.7)] motion-reduce:transition-none" style={{ opacity: showClock ? 1 : 0, transitionDelay: showClock ? "120ms" : "0ms" }}>
+          {time}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /** The telemetry line that sweeps in above the card while the workspace is being prepared. */
 function UnlockLine() {
   return (
@@ -222,7 +276,7 @@ export default function LoginPage() {
       <motion.div animate={unlocking ? { scale: 0.98 } : { scale: 1 }} transition={{ duration: 0.5, ease: "easeInOut" }} className="relative z-10 w-full max-w-[440px]">
         {/* brand */}
         <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 260, damping: 24 }} className="mb-10 flex flex-col items-center text-center">
-          <BrandLogo onDark className="w-[210px] sm:w-[240px]" />
+          <SplitLogo />
           <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.22em] text-sky-200/90">
             <span className="h-1.5 w-1.5 rounded-full bg-[#0050FF] shadow-[0_0_10px_#0050FF]" />
             Operations Hub &amp; Claim Management
