@@ -20,20 +20,25 @@ interface ToastState {
 
 let counter = 0;
 
+/** Tones that are not shown (see `push`). */
+const QUIET: ToastTone[] = ["success", "info"];
+
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   push: (t) => {
     const id = `toast_${++counter}`;
     const tone = t.tone ?? "info";
+    // Routine confirmations stay off screen (buttons show their own spinner / state). Only errors, warnings, progress and
+    // anything carrying an action such as Undo are shown.
+    if (QUIET.includes(tone) && !t.action) return id;
     const item: ToastItem = { id, tone, duration: tone === "loading" ? 0 : 4200, ...t };
     set((s) => ({ toasts: [...s.toasts.slice(-3), item] }));
-    // Imported on demand: the sound module reads Settings, which itself raises toasts.
-    if (tone === "success") void import("@/lib/sound").then((m) => m.sfx.confirm());
     return id;
   },
   update: (id, patch) =>
     set((s) => ({
-      toasts: s.toasts.map((t) =>
+      // A progress toast that finishes successfully just goes away.
+      toasts: (patch.tone && QUIET.includes(patch.tone) && !patch.action ? s.toasts.filter((t) => t.id !== id) : s.toasts).map((t) =>
         t.id === id ? { ...t, ...patch, duration: patch.duration ?? (patch.tone && patch.tone !== "loading" ? 4200 : t.duration) } : t,
       ),
     })),
