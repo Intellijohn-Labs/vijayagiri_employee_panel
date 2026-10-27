@@ -1,21 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
 import { AlertTriangle, CircleHelp, Mail, Moon, ShieldAlert, Sun, X } from "lucide-react";
 import { useApp } from "@/store/app-store";
 import { useTheme } from "@/store/theme-store";
-import { toast } from "@/store/toast-store";
 import { HQ_ID } from "@/lib/branches";
 import { useBranchTools } from "@/store/branch-store";
 import { Popover } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/primitives";
 import { ActivationFlow } from "@/components/auth/activation";
 import { PasscodeStep } from "@/components/auth/passcode";
+import { PortalInit } from "@/components/auth/portal-init";
 import { AuthBackground, AuthField, BrandLogo, PasswordField, REVEAL, SubmitButton, linkCls, type AuthStage } from "@/components/auth/auth-ui";
 import { useSettings } from "@/store/settings-store";
-import { sfx } from "@/lib/sound";
 import { forgotPassword, loadRemembered, saveRemembered } from "@/components/auth/auth-kit";
 import { ACCESS_DENIED, authenticate, useEmployees, type Employee } from "@/store/employee-store";
 
@@ -111,9 +110,8 @@ export default function LoginPage() {
   const [stage, setStage] = useState<AuthStage>("idle");
   // Set while an Admin must still enter the passcode from Settings → Security.
   const [gate, setGate] = useState<Employee | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  /** Set once sign-in succeeded: shows the start-up sequence for this employee. */
+  const [welcome, setWelcome] = useState<Employee | null>(null);
 
   useEffect(() => {
     const saved = loadRemembered();
@@ -128,19 +126,19 @@ export default function LoginPage() {
 
   const wiggle = () => void shake.start({ x: [0, -12, 11, -9, 7, -4, 2, 0], transition: { duration: 0.5, ease: "easeInOut" } });
 
-  /** Signed in: the card lifts away, then the portal opens for this employee. */
+  /** Signed in: the card steps back and the 3-second start-up sequence runs; when it ends the portal opens for this employee. */
   const enter = (who: Employee) => {
-    if (timer.current) clearTimeout(timer.current);
     setStage("launch");
-    sfx.launch();
-    timer.current = setTimeout(() => {
-      // Central admins start on the whole network; someone limited to one showroom lands on that showroom.
-      const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
-      useEmployees.getState().signIn(who);
-      useApp.getState().setBranchScope(scope, { silent: true });
-      router.push("/branches");
-      toast.success(`Welcome back, ${who.name.split(" ")[0]}`, `Signed in as ${who.role}`);
-    }, 850);
+    setWelcome(who);
+  };
+
+  /** Called by the start-up sequence at its 3.0 s mark. */
+  const openPortal = (who: Employee) => {
+    // Central admins start on the whole network; someone limited to one showroom lands on that showroom.
+    const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
+    useEmployees.getState().signIn(who);
+    useApp.getState().setBranchScope(scope, { silent: true });
+    router.push("/branches");
   };
 
   const submit = async () => {
@@ -192,6 +190,7 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 py-12 sm:px-6">
       <AuthBackground />
+      {welcome && <PortalInit name={welcome.name} onDone={() => openPortal(welcome)} />}
 
       <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-5">
         <Utilities />
