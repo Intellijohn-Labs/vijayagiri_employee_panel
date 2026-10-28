@@ -32,7 +32,7 @@ interface ClaimsState {
   set: (id: string, patch: Partial<Claim>) => void;
   log: (id: string, text: string, tone?: ClaimEvent["tone"]) => void;
   /** Stage 5, step one: record the Yamaha order. The claim stays in stage 5 while the parts are in transit. */
-  placeOrder: (id: string, orderNo: string, etaDays: number) => boolean;
+  placeOrder: (id: string, orderNo: string, etaDays: number, order?: Pick<Claim["parts"], "lines" | "vendor" | "needed" | "notify">) => boolean;
   /** Apply `patch`, then move the claim to the next stage if everything the stage needs is in place. */
   complete: (id: string, patch?: Partial<Claim>) => CompleteResult;
   attachFile: (id: string, slot: FileSlot, file: File) => Promise<void>;
@@ -157,7 +157,7 @@ export const useClaims = create<ClaimsState>((set, get) => {
       return true;
     },
 
-    placeOrder: (id, orderNo, etaDays) => {
+    placeOrder: (id, orderNo, etaDays, order) => {
       const c = find(id);
       if (c?.stage !== 5 || !orderNo.trim()) return false;
       const now = Date.now();
@@ -166,7 +166,7 @@ export const useClaims = create<ClaimsState>((set, get) => {
       const late = now > c.stageEnteredAt + orderH * HOUR;
       edit(id, (x) => ({
         ...x,
-        parts: { ...x.parts, orderNo: orderNo.trim(), orderedAt: now, orderedBy: myName(), etaDays: eta },
+        parts: { ...x.parts, ...order, lines: (order?.lines ?? x.parts.lines)?.map((l) => ({ ...l, status: "PO Generated" as const })), orderNo: orderNo.trim(), orderedAt: now, orderedBy: myName(), etaDays: eta },
         events: [ev(`Yamaha order ${orderNo.trim()} placed by ${myName()} — transit ETA ${eta} day${eta === 1 ? "" : "s"}${late ? ` (${fmtHours(orderH)} order SLA was missed)` : ""}`, late ? "warn" : "ok", now), ...x.events],
       }));
       return true;

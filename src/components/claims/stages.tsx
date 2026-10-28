@@ -6,9 +6,10 @@ import { useBranch } from "@/store/branch-store";
 import { useSessionEmployee } from "@/store/employee-store";
 import { fileId, isBranchManagerOf, useClaims, type FileSlot } from "@/store/claims-store";
 import { toast } from "@/store/toast-store";
+import { savePartsOrder } from "@/actions/claims";
 import { loadClaimFile } from "@/lib/photo-db";
 import { fmtHours, stageSla } from "@/lib/sla-config";
-import { INTIMATION_MODES, APPROVALS, ESTIMATE_CATEGORIES, SLA, VISIT_STATUSES, customerPayable, estimateTotal, fmtDateTime, isoToday, jobCardOf, missingFor, nextClaimNo, nextJobCardNo, stageDef, toLocalInput, type Claim, type ClaimFile, type EstimateLine, type StageNo } from "@/lib/claims";
+import { PART_VENDORS, INTIMATION_MODES, APPROVALS, ESTIMATE_CATEGORIES, SLA, VISIT_STATUSES, customerPayable, estimateTotal, fmtDateTime, isoToday, jobCardOf, missingFor, nextClaimNo, nextJobCardNo, partComplete, partsTotal, stageDef, toLocalInput, type Claim, type ClaimFile, type EstimateLine, type PartLine, type PartStatus, type StageNo } from "@/lib/claims";
 import { cn, formatINR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/popover";
@@ -395,80 +396,223 @@ function Stage4({ claim, readOnly }: PanelProps) {
 
 /* ───────── Stage 5 · Spare parts ordering ───────── */
 
+const blankPart = (vendor = ""): PartLine => ({ id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, code: "", description: "", qty: 1, unitPrice: null, vendor, status: "Pending Order" });
+const PART_TONE: Record<PartStatus, string> = { "Pending Order": "border-warn/40 bg-warn-tint text-warn", "PO Generated": "border-info/40 bg-info-tint text-info", Dispatched: "border-ok/40 bg-ok-tint text-ok" };
+const OTHER_VENDOR = "Other";
+
 function Stage5({ claim, readOnly }: PanelProps) {
   const placeOrder = useClaims((s) => s.placeOrder);
+  const set = useClaims((s) => s.set);
   const { finish } = useActions(claim);
-  const [orderNo, setOrderNo] = useState(claim.parts.orderNo);
-  const [eta, setEta] = useState(String(claim.parts.etaDays));
-  const sla = useSla(claim);
-  const ordered = !!claim.parts.orderNo && claim.parts.orderedAt !== null;
-  const partsLines = claim.estimate.lines.filter((l) => l.category === "Parts");
-  const etaAt = claim.parts.orderedAt ? claim.parts.orderedAt + claim.parts.etaDays * 24 * 3_600_000 : null;
+  const branch = useBranch(claim.branchId);
+  const p = claim.parts;
+  const ordered = !!p.orderNo && p.orderedAt !== null;
+  const locked = readOnly || ordered;
+  const [lines, setLines] = useState<PartLine[]>(p.lines ?? []);
+  // A vendor outside the two standard depots was typed in, so it comes back as "Other" with its name.
+  const stored = p.vendor ?? "";
+  const standard = (PART_VENDORS as readonly string[]).includes(stored);
+  const [vendor, setVendor] = useState(stored && !standard ? OTHER_VENDOR : stored);
+  const [vendorOther, setVendorOther] = useState(stored && !standard ? stored : "");
+  const [needed, setNeeded] = useState(p.needed !== false);
+  const [notify, setNotify] = useState(p.notify !== false);
+  const [orderNo, setOrderNo] = useState(p.orderNo);
+  const [eta, setEta] = useState(String(p.etaDays));
   const v = useStageValidation();
-  const noOrder = v.showErrors && !ordered && !orderNo.trim();
+  const sla = useSla(claim);
+
+  const vendorName = vendor === OTHER_VENDOR ? vendorOther.trim() : vendor;
+  const draft = { ...p, lines, vendor: vendorName, needed, notify };
+  const missing = missingFor({ ...claim, parts: draft });
+  const total = partsTotal(lines);
+  const etaAt = p.orderedAt ? p.orderedAt + p.etaDays * 24 * 3_600_000 : null;
+  const estimateParts = claim.estimate.lines.filter((l) => l.category === "Parts" && l.amount > 0);
+
+  const setRow = (id: string, patch: Partial<PartLine>) => setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  /** Everything the order needs before it can be saved as complete or placed. */
+  const rowsOk = lines.length > 0 && lines.every(partComplete);
+  const detailsOk = rowsOk && !!vendorName;
+
+  // Red marks appear only after a save or placement was attempted, and each clears as soon as it is fixed.
+  const noRows = v.showErrors && needed && !ordered && lines.length === 0;
+  const rowBad = (l: PartLine, f: "description" | "qty" | "unitPrice") => v.showErrors && !ordered && (f === "description" ? !l.description.trim() : f === "qty" ? !(l.qty >= 1) : !((l.unitPrice ?? 0) > 0));
+  const vendorBad = v.showErrors && needed && !ordered && !vendorName;
+  const orderNoBad = v.showErrors && needed && !ordered && !orderNo.trim();
+  const cell = (bad: boolean) => (bad ? "!border-red-500 !bg-red-50/50 focus:!border-red-600 focus:ring-2 focus:ring-red-500/30 dark:!bg-red-950/25" : undefined);
+
+  const persist = async (saved: PartLine[], placed: boolean) => {
+    const r = await savePartsOrder({ claimId: claim.id, parts: saved, vendorInfo: { vendor: vendorName, requiresParts: needed, notify, orderNo: placed ? orderNo.trim() : p.orderNo, etaDays: Number(eta), placed } });
+    if (!r.ok) toast.error("The parts order could not be saved", r.error);
+    return r;
+  };
+
+  const saveDraft = () => {
+    v.flag(needed && !rowsOk);
+    set(claim.id, { parts: draft });
+    if (needed && lines.length && lines.every(partComplete)) void persist(lines, false);
+    toast.success("Parts order saved");
+  };
+
+  const place = () => {
+    v.flag(!detailsOk || !orderNo.trim());
+    if (!detailsOk || !orderNo.trim()) return void toast.error("The parts order isn't complete", missing.filter((m) => !m.startsWith("Yamaha order")).join(" · ") || "Enter the Yamaha order number");
+    const placed = lines.map((l) => ({ ...l, status: "PO Generated" as const }));
+    if (!placeOrder(claim.id, orderNo, Number(eta), { lines: placed, vendor: vendorName, needed, notify })) return void toast.error("Enter the Yamaha order number first");
+    toast.success("Yamaha order recorded", "The 5-hour clock stops and the transit ETA clock starts.");
+    void persist(placed, true).then((r) => {
+      if (r.ok && notify && r.automation === "started") toast.success("Vendor notification sent");
+    });
+  };
+
+  const advance = () => {
+    if (!needed) return void finish({ parts: draft });
+    v.flag(!ordered);
+    finish();
+  };
+
   return (
     <div ref={v.root}>
-      <Section title="Parts to order" hint="From the approved estimate">
-        {partsLines.length ? (
-          <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-            {partsLines.map((l) => (
-              <li key={l.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
-                <span className="text-fg">{l.description || "Unnamed part"}</span>
-                <span className="tabular-nums text-muted">{formatINR(l.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[12.5px] text-faint">No parts lines on the estimate.</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 text-[13px] text-fg">
+          {locked ? <Checkbox checked={needed} onChange={() => undefined} label="This claim needs spare parts" className="pointer-events-none" /> : <Checkbox checked={needed} onChange={setNeeded} label="This claim needs spare parts" />}
+          <span>This claim needs spare parts</span>
+        </div>
+        {!locked && needed && estimateParts.length > 0 && (
+          <Button size="sm" onClick={() => setLines([...lines, ...estimateParts.map((l) => ({ ...blankPart(), description: l.description, unitPrice: l.amount }))])}>
+            Import {estimateParts.length} from estimate
+          </Button>
         )}
-      </Section>
-
-      <div className="mt-5">
-        <Section title="Yamaha order" hint={`Parts Manager places it within ${fmtHours(stageSla(5).durationH)} of this stage starting`}>
-          {ordered ? (
-            <dl className="grid gap-4 sm:grid-cols-4">
-              <Fact label="Order no." mono>{claim.parts.orderNo}</Fact>
-              <Fact label="Placed">{claim.parts.orderedAt ? fmtDateTime(claim.parts.orderedAt) : ""}</Fact>
-              <Fact label="Placed by">{claim.parts.orderedBy}</Fact>
-              <Fact label="Transit ETA">{etaAt ? `${fmtDateTime(etaAt)} (${claim.parts.etaDays} d)` : ""}</Fact>
-            </dl>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-[1fr_200px_auto] sm:items-end">
-              <Field label="Yamaha order no." required error={noOrder ? MANDATORY : undefined}>
-                <Input invalid={noOrder} value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="YMD-PO-000000" className="font-mono" disabled={readOnly} />
-              </Field>
-              <Field label="Transit ETA" hint={`Max ${SLA.maxTransitDays} days`}>
-                <Select<string> value={eta} onChange={setEta} disabled={readOnly} options={Array.from({ length: SLA.maxTransitDays }, (_, i) => ({ value: String(i + 1), label: `${i + 1} day${i ? "s" : ""}` }))} />
-              </Field>
-              {!readOnly && (
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    v.flag(!orderNo.trim());
-                    if (placeOrder(claim.id, orderNo, Number(eta))) toast.success("Yamaha order recorded", "The 5-hour clock stops and the transit ETA clock starts.");
-                    else toast.error("Enter the Yamaha order number first");
-                  }}
-                >
-                  Place order
-                </Button>
-              )}
-            </div>
-          )}
-          {sla && ordered && <p className="mt-3 text-[12px] text-muted">Parts are in transit to the Central yard. When they arrive, mark them received to start the 12-hour dispatch clock.</p>}
-        </Section>
       </div>
 
+      {needed ? (
+        <>
+          <Section title="Parts to order" hint={`Total parts order value ${formatINR(total)}`}>
+            <Flag error={noRows && "⚠️ At least one spare part is required to place this order"}>
+              <div className="overflow-x-auto">
+                <div className="min-w-[780px] space-y-2">
+                  <div className="grid grid-cols-[120px_1fr_70px_110px_170px_116px_32px] gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wider text-faint">
+                    <span>Part code</span>
+                    <span>Description</span>
+                    <span>Qty</span>
+                    <span>Unit price ₹</span>
+                    <span>Vendor</span>
+                    <span>Status</span>
+                    <span />
+                  </div>
+                  {lines.map((l) => (
+                    <div key={l.id} className="grid grid-cols-[120px_1fr_70px_110px_170px_116px_32px] items-center gap-2">
+                      <Input value={l.code} onChange={(e) => setRow(l.id, { code: e.target.value.toUpperCase() })} placeholder="Optional" aria-label="Part code" className="font-mono" disabled={locked} />
+                      <div data-invalid={rowBad(l, "description") ? "" : undefined}>
+                        <Input value={l.description} onChange={(e) => setRow(l.id, { description: e.target.value })} placeholder="Part description" aria-label="Part description" invalid={rowBad(l, "description")} disabled={locked} />
+                      </div>
+                      <div data-invalid={rowBad(l, "qty") ? "" : undefined}>
+                        <Input type="number" min={1} value={l.qty || ""} onChange={(e) => setRow(l.id, { qty: Math.max(0, Math.floor(Number(e.target.value)) || 0) })} aria-label="Quantity" invalid={rowBad(l, "qty")} disabled={locked} />
+                      </div>
+                      <div data-invalid={rowBad(l, "unitPrice") ? "" : undefined}>
+                        <Input type="number" min={0} step="0.01" value={l.unitPrice ?? ""} onChange={(e) => setRow(l.id, { unitPrice: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) })} placeholder="0.00" aria-label="Unit price in rupees" invalid={rowBad(l, "unitPrice")} disabled={locked} />
+                      </div>
+                      <Select<string> value={l.vendor} onChange={(val) => setRow(l.id, { vendor: val })} disabled={locked} options={[{ value: "", label: "Order default" }, ...PART_VENDORS.map((x) => ({ value: x, label: x })), ...(vendorName && !(PART_VENDORS as readonly string[]).includes(vendorName) ? [{ value: vendorName, label: vendorName }] : [])]} />
+                      <span className={cn("inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11.5px] font-medium", PART_TONE[l.status])}>{l.status}</span>
+                      {!locked ? (
+                        <Button variant="ghost" size="sm" iconOnly aria-label="Remove part" onClick={() => setLines(lines.filter((x) => x.id !== l.id))}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <span />
+                      )}
+                    </div>
+                  ))}
+                  {!lines.length && <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[12.5px] text-faint">No parts added yet.</p>}
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                {!locked ? (
+                  <Button size="sm" className={cn(noRows && "animate-pulse ring-2 ring-red-500 ring-offset-1")} leading={<Plus className="h-3 w-3" />} onClick={() => setLines([...lines, blankPart()])}>
+                    Add part
+                  </Button>
+                ) : (
+                  <span />
+                )}
+                <p className="text-[13px] text-muted">
+                  Total parts order value <span className="ml-1 text-[15px] font-semibold tabular-nums text-fg">{formatINR(total)}</span>
+                </p>
+              </div>
+            </Flag>
+          </Section>
+
+          <div className="mt-5">
+            <Section title="Order summary & dispatch" hint={`Parts Manager places it within ${fmtHours(stageSla(5).durationH)} of this stage starting`}>
+              <div className="rounded-xl border border-line bg-hover/40 p-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Vendor" required error={vendorBad && !vendor ? MANDATORY : undefined}>
+                    <Select<string> value={vendor || null} onChange={setVendor} placeholder="Choose the vendor" invalid={vendorBad && !vendor} disabled={locked} options={[...PART_VENDORS, OTHER_VENDOR].map((x) => ({ value: x, label: x === OTHER_VENDOR ? "Other (type the name)" : x }))} />
+                  </Field>
+                  {vendor === OTHER_VENDOR && (
+                    <Field label="Vendor name" required error={vendorBad && vendor === OTHER_VENDOR ? MANDATORY : undefined}>
+                      <Input value={vendorOther} onChange={(e) => setVendorOther(e.target.value)} invalid={vendorBad && vendor === OTHER_VENDOR} disabled={locked} />
+                    </Field>
+                  )}
+                  <div className="sm:col-span-2">
+                    <dl className="grid gap-4 sm:grid-cols-3">
+                      <Fact label="Deliver to">{branch?.name ?? claim.branchId}</Fact>
+                      <Fact label="Address" className="sm:col-span-2">{[branch?.address, branch?.city].filter(Boolean).join(", ")}</Fact>
+                    </dl>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={notify}
+                  disabled={locked}
+                  onClick={() => setNotify(!notify)}
+                  className="mt-4 flex w-full items-center gap-3 rounded-lg border border-line bg-surface p-3 text-left outline-none transition-colors hover:border-strong focus-visible:shadow-ring disabled:opacity-60"
+                >
+                  <span className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", notify ? "bg-accent" : "bg-fg/20")}>
+                    <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-[left]", notify ? "left-[18px]" : "left-0.5")} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-medium text-fg">Automated Vendor Notification (n8n Webhook)</span>
+                    <span className="block text-[12px] text-muted">{notify ? "Ready: the vendor is notified automatically when the order is placed." : "Off: you will need to send the order to the vendor yourself."}</span>
+                  </span>
+                </button>
+
+                {ordered ? (
+                  <dl className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-4">
+                    <Fact label="Order no." mono>{p.orderNo}</Fact>
+                    <Fact label="Placed">{p.orderedAt ? fmtDateTime(p.orderedAt) : ""}</Fact>
+                    <Fact label="Placed by">{p.orderedBy}</Fact>
+                    <Fact label="Transit ETA">{etaAt ? `${fmtDateTime(etaAt)} (${p.etaDays} d)` : ""}</Fact>
+                  </dl>
+                ) : (
+                  <div className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-[1fr_200px_auto] sm:items-end">
+                    <Field label="Yamaha order no." required error={orderNoBad ? MANDATORY : undefined}>
+                      <Input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="YMD-PO-000000" className="font-mono" invalid={orderNoBad} disabled={readOnly} />
+                    </Field>
+                    <Field label="Transit ETA" hint={`Max ${SLA.maxTransitDays} days`}>
+                      <Select<string> value={eta} onChange={setEta} disabled={readOnly} options={Array.from({ length: SLA.maxTransitDays }, (_, i) => ({ value: String(i + 1), label: `${i + 1} day${i ? "s" : ""}` }))} />
+                    </Field>
+                    {!readOnly && (
+                      <Button variant="primary" onClick={place}>
+                        Place order
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {sla && ordered && <p className="mt-3 text-[12px] text-muted">Parts are in transit to the Central yard. When they arrive, mark them received to start the 12-hour dispatch clock.</p>}
+            </Section>
+          </div>
+        </>
+      ) : (
+        <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[12.5px] text-muted">No spare parts are needed for this repair. Continue to the next stage when you are ready.</p>
+      )}
+
       {!readOnly && (
-        <Footer missing={missingFor(claim)}>
-          <Button
-            variant="primary"
-            leading={<Truck className="h-3.5 w-3.5" />}
-            onClick={() => {
-              v.flag(!ordered);
-              finish();
-            }}
-          >
-            Parts received at Central
+        <Footer missing={needed ? missing : []}>
+          {needed && !ordered && <Button onClick={saveDraft}>Save parts</Button>}
+          <Button variant="primary" leading={<Truck className="h-3.5 w-3.5" />} onClick={advance}>
+            {needed ? "Parts received at Central" : "Continue without parts"}
           </Button>
         </Footer>
       )}
@@ -483,6 +627,13 @@ function Stage6({ claim, readOnly }: PanelProps) {
   const [t, setT] = useState({ dispatchRef: claim.transit.dispatchRef, carrier: claim.transit.carrier });
   const patch = { transit: { ...claim.transit, ...t } };
   const missing = missingFor({ ...claim, ...patch });
+  /** Recording the dispatch moves every part on the order to "Dispatched", in the claim and in the stored parts table. */
+  const dispatched = () => {
+    const ready = !!t.dispatchRef.trim();
+    const lines = (claim.parts.lines ?? []).map((l) => (ready ? { ...l, status: "Dispatched" as const } : l));
+    if (lines.length && ready) void savePartsOrder({ claimId: claim.id, parts: lines, vendorInfo: { vendor: claim.parts.vendor ?? "", requiresParts: true, notify: false, orderNo: claim.parts.orderNo } });
+    return { parts: { ...claim.parts, lines }, transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } };
+  };
   const v = useStageValidation();
   const noRef = v.showErrors && !t.dispatchRef.trim();
   return (
@@ -505,7 +656,7 @@ function Stage6({ claim, readOnly }: PanelProps) {
           <Button
             onClick={() => {
               v.flag(missing.length > 0);
-              save({ transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } }, "Dispatch recorded");
+              save(dispatched(), "Dispatch recorded");
             }}
           >
             Record dispatch
@@ -515,7 +666,7 @@ function Stage6({ claim, readOnly }: PanelProps) {
             leading={<Truck className="h-3.5 w-3.5" />}
             onClick={() => {
               v.flag(missing.length > 0);
-              finish({ transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } });
+              finish(dispatched());
             }}
           >
             Parts reached the branch

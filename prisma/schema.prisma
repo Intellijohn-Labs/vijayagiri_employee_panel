@@ -43,6 +43,7 @@ model Claim {
 
   jobCard JobCard?
   history StageHistory[]
+  partsLines PartsOrderLine[]
 
   @@index([branchId])
   @@index([registrationNumber])
@@ -50,6 +51,28 @@ model Claim {
 }
 
 /// Job Card Ver 2.1 form fields
+/// One spare part on a claim's Stage 5 order. The table is replaced as a whole each time the order is saved.
+model PartsOrderLine {
+  id          String   @id @default(cuid())
+  claimId     String
+  claim       Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  position    Int
+  partNo      String   @default("")
+  description String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  /// Empty means the order's default vendor
+  vendor      String   @default("")
+  /// "Pending Order" | "PO Generated" | "Dispatched"
+  status      String   @default("Pending Order")
+  /// The Yamaha order number once placed
+  orderNo     String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([claimId])
+}
+
 model JobCard {
   id             String    @id @default(cuid())
   claimId        String    @unique

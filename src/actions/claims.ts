@@ -5,7 +5,8 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { UNAUTHORIZED_ROOT, rootSession, sessionEmployee } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
-import { STAGES, nextRef, type Claim } from "@/lib/claims";
+import { triggerPartsOrderAutomation } from "@/lib/parts-automation";
+import { PART_STATUSES, STAGES, nextRef, type Claim, type PartLine } from "@/lib/claims";
 
 export type ClaimResult = { ok: true; claim: Claim } | { ok: false; error: string };
 
@@ -159,5 +160,80 @@ export async function deleteClaim(id: string): Promise<{ ok: true } | { ok: fals
     return { ok: true };
   } catch {
     return { ok: false, error: "Could not delete the claim. Please try again." };
+  }
+}
+
+export interface PartsVendorInfo {
+  vendor: string;
+  requiresParts: boolean;
+  /** Send the order to the vendor through the n8n automation */
+  notify: boolean;
+  orderNo?: string;
+  etaDays?: number;
+  /** True only when the order is being placed now, which is what records "created" and fires the automation */
+  placed?: boolean;
+}
+
+export type PartsOrderResult = { ok: true; automation: "started" | "skipped" | "off" } | { ok: false; error: string };
+
+const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/**
+ * Stores a claim's spare-parts lines in PartsOrderLine (replacing the previous set), and records the order in the audit log.
+ * When the order is being placed and automatic vendor notification is on, it also hands the order to the n8n webhook.
+ * The claim's own copy of the order travels with the claim through saveClaim.
+ */
+export async function savePartsOrder(input: { claimId: string; parts: PartLine[]; vendorInfo: PartsVendorInfo }): Promise<PartsOrderResult> {
+  const me = await sessionEmployee();
+  if (!me) return { ok: false, error: SIGN_IN };
+  const { claimId, vendorInfo } = input;
+  if (typeof claimId !== "string" || !claimId || !Array.isArray(input.parts) || input.parts.length > 100) return { ok: false, error: "Invalid parts order" };
+
+  const lines = input.parts.map((l, position) => ({
+    position,
+    partNo: text(l.code, 60),
+    description: text(l.description, 200),
+    quantity: Math.round(Number(l.qty)),
+    unitPrice: Math.round(Number(l.unitPrice ?? 0) * 100) / 100,
+    vendor: text(l.vendor, 120),
+    status: PART_STATUSES.includes(l.status) ? l.status : "Pending Order",
+  }));
+  if (vendorInfo.requiresParts && !lines.length) return { ok: false, error: "Add at least one spare part" };
+  if (lines.some((l) => !l.description || !(l.quantity >= 1 && l.quantity <= 9999) || !(l.unitPrice >= 0 && l.unitPrice <= 10_000_000))) return { ok: false, error: "Every part needs a description, a quantity and a valid unit price" };
+
+  const vendor = text(vendorInfo.vendor, 120);
+  const orderNo = text(vendorInfo.orderNo, 60);
+  try {
+    const claim = await prisma.claim.findUnique({ where: { id: claimId }, select: { ref: true, claimNo: true, branchId: true, customerName: true, vehicleModel: true, registrationNumber: true } });
+    if (!claim) return { ok: false, error: "Claim not found" };
+    await prisma.$transaction([
+      prisma.partsOrderLine.deleteMany({ where: { claimId } }),
+      prisma.partsOrderLine.createMany({ data: lines.map((l) => ({ claimId, ...l, orderNo })) }),
+    ]);
+    const totalValue = lines.reduce((t, l) => t + l.quantity * l.unitPrice, 0);
+    await logAudit({
+      action: vendorInfo.placed ? "PARTS_ORDER_CREATED" : "PARTS_ORDER_UPDATED",
+      entity: "Claim",
+      entityId: claimId,
+      branchId: claim.branchId,
+      details: { ref: claim.ref, orderNo: orderNo || undefined, vendor, parts: lines.length, totalValue, automatic: vendorInfo.notify },
+    });
+
+    let automation: "started" | "skipped" | "off" = "off";
+    if (vendorInfo.placed && vendorInfo.notify) {
+      const branch = await prisma.branch.findUnique({ where: { code: claim.branchId }, select: { name: true, address: true, city: true, phone: true } });
+      const started = triggerPartsOrderAutomation({
+        event: "parts_order.created",
+        claim: { id: claimId, ref: claim.ref, claimNo: claim.claimNo, customer: claim.customerName, vehicle: claim.vehicleModel, regNo: claim.registrationNumber },
+        order: { orderNo, vendor, etaDays: Number(vendorInfo.etaDays) || 0, totalValue, createdBy: me.name, createdAt: new Date().toISOString() },
+        destination: { branch: branch?.name ?? claim.branchId, address: [branch?.address, branch?.city].filter(Boolean).join(", "), phone: branch?.phone ?? "" },
+        parts: lines.map((l) => ({ code: l.partNo, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, vendor: l.vendor || vendor, lineTotal: l.quantity * l.unitPrice })),
+      });
+      automation = started ? "started" : "skipped";
+    }
+    revalidatePath("/claims");
+    return { ok: true, automation };
+  } catch {
+    return { ok: false, error: "Could not save the parts order. Please try again." };
   }
 }

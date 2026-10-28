@@ -151,6 +151,25 @@ export const toLocalInput = (ts: number) => {
   return `${isoDate(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
+export const PART_STATUSES = ["Pending Order", "PO Generated", "Dispatched"] as const;
+export type PartStatus = (typeof PART_STATUSES)[number];
+export const PART_VENDORS = ["Primary Yamaha OEM Depot", "Local Distributor"] as const;
+
+export interface PartLine {
+  id: string;
+  code: string;
+  description: string;
+  qty: number;
+  unitPrice: number | null;
+  /** Empty means the order's default vendor */
+  vendor: string;
+  status: PartStatus;
+}
+
+/** A row is complete when it names the part and has a quantity and a price. */
+export const partComplete = (l: PartLine) => !!l.description.trim() && l.qty >= 1 && (l.unitPrice ?? 0) > 0;
+export const partsTotal = (lines: PartLine[]) => lines.reduce((t, l) => t + (l.qty >= 1 ? l.qty : 0) * (l.unitPrice ?? 0), 0);
+
 export interface Claim {
   id: string;
   /** Internal reference generated at intake, e.g. CLM-PBR-0012 */
@@ -187,7 +206,21 @@ export interface Claim {
   jobCard: JobCard;
   estimate: { lines: EstimateLine[]; intimationDate: string; intimationMode: (typeof INTIMATION_MODES)[number]; intimationRef: string; notes: string };
   survey: { surveyor: string; phone: string; visit: (typeof VISIT_STATUSES)[number]; visitDate: string; notes: string; report: ClaimFile | null; approval: (typeof APPROVALS)[number] };
-  parts: { orderNo: string; orderedAt: number | null; orderedBy: string; etaDays: number; receivedAt: number | null };
+  parts: {
+    orderNo: string;
+    orderedAt: number | null;
+    orderedBy: string;
+    etaDays: number;
+    receivedAt: number | null;
+    /** The spare parts on the order. Absent on claims saved before the parts table existed. */
+    lines?: PartLine[];
+    /** Order-level vendor; the free-text name when "Other" was chosen */
+    vendor?: string;
+    /** False when the repair needs no spare parts. Missing means true. */
+    needed?: boolean;
+    /** Send the order to the vendor through the n8n automation. Missing means true. */
+    notify?: boolean;
+  };
   transit: { dispatchRef: string; carrier: string; dispatchedAt: number | null; reachedAt: number | null };
   work: { ramp: ClaimFile | null; startedAt: number | null; notifiedAt: number | null };
   checklist: ChecklistItem[];
@@ -316,9 +349,19 @@ export function missingFor(c: Claim): string[] {
       if (!c.survey.report) m.push("Survey report upload");
       if (c.survey.approval !== "Approved") m.push("Survey report approved");
       break;
-    case 5:
-      if (!c.parts.orderNo.trim() || c.parts.orderedAt === null) m.push("Yamaha order placed with an order number");
+    case 5: {
+      const p = c.parts;
+      if (p.needed === false) break;
+      const lines = p.lines ?? [];
+      // Claims ordered before the parts table existed have no lines to check.
+      if (!(p.lines === undefined && p.orderedAt !== null)) {
+        if (!lines.some(partComplete)) m.push("At least one spare part with a quantity and unit price");
+        else if (!lines.every(partComplete)) m.push("Complete or remove the unfinished part rows");
+        if (!p.vendor?.trim()) m.push("Vendor");
+      }
+      if (!p.orderNo.trim() || p.orderedAt === null) m.push("Yamaha order placed with an order number");
       break;
+    }
     case 6:
       if (!c.transit.dispatchRef.trim()) m.push("Dispatch reference (vehicle / consignment no.)");
       break;
