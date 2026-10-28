@@ -164,7 +164,7 @@ export function Select<T extends string>({ value, onChange, options, placeholder
           className={cn(
             "flex h-8 w-full items-center gap-2 rounded-md border border-line bg-surface px-2.5 text-left text-[13px] shadow-card outline-none transition-colors hover:border-strong disabled:opacity-50",
             open && "border-accent shadow-ring",
-            invalid && "!border-danger",
+            invalid && "!border-red-500 !bg-red-50/50 dark:!bg-red-950/25",
             buttonClassName,
           )}
         >

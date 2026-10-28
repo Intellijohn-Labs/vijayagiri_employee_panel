@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
+import { useRef, useState, type ComponentProps, type ReactNode } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,48 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
       </div>
       {children}
     </section>
+  );
+}
+
+/** The message shown under a required field that is still empty once the user has tried to save. */
+export const MANDATORY = "This field is mandatory";
+
+/**
+ * Save-time validation for a stage panel. `flag(hasErrors)` turns the red highlights on and, when something is missing,
+ * scrolls to the first marked field or section (anything carrying `data-invalid`) and shakes it. Because each panel derives
+ * its errors from the live form, a field loses its red the moment it holds a valid value.
+ */
+export function useStageValidation() {
+  const [showErrors, setShowErrors] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const flag = (hasErrors: boolean) => {
+    setShowErrors(true);
+    if (!hasErrors) return;
+    // Wait a frame so the invalid markers are in the DOM.
+    requestAnimationFrame(() => {
+      const first = root.current?.querySelector<HTMLElement>("[data-invalid]");
+      if (!first) return;
+      first.scrollIntoView({ behavior: "smooth", block: "center" });
+      first.classList.remove("field-shake");
+      void first.offsetWidth;
+      first.classList.add("field-shake");
+      first.querySelector<HTMLElement>("input,select,textarea,button")?.focus({ preventScroll: true });
+    });
+  };
+  return { showErrors, root, flag };
+}
+
+/** Wraps a section or table that has to be filled in: a red dashed outline and a warning while `error` is set. */
+export function Flag({ error, children, className }: { error?: string | false; children: ReactNode; className?: string }) {
+  return (
+    <div data-invalid={error ? "" : undefined} className={cn(error && "rounded-lg border-2 border-dashed border-red-500 bg-red-50/30 p-3 dark:bg-red-950/20", className)}>
+      {children}
+      {error && (
+        <p role="alert" className="mt-2 text-[12px] font-medium text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

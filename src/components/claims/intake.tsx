@@ -205,7 +205,7 @@ export function IntakeFields({ value, onChange, errors = {}, showBranch, readOnl
           <Select<string> value={value.model || null} onChange={(v) => set("model", v)} placeholder="Choose the model" searchable invalid={!!errors.model} disabled={readOnly} options={models.map((m) => ({ value: m, label: m }))} />
         </Field>
       </div>
-      <div data-field="regNo" className="sm:col-span-2">
+      <div data-field="regNo" data-invalid={errors.regNo ? "" : undefined} className="sm:col-span-2">
         <p className="mb-1.5 text-xs font-medium text-fg">
           Registration number<span className="ml-0.5 text-accent-text">*</span>
         </p>

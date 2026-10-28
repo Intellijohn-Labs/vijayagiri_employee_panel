@@ -18,7 +18,7 @@ export interface JobCardForm {
 /** The Stage 2 fields that must be filled before saving, and the message to show under each when left empty. */
 export type JobCardField = "jobCardNo" | "claimNo" | "bay" | "receivedAt" | "promisedAt" | "chassisNo" | "odometer" | "supervisor";
 export type JobCardErrors = Partial<Record<JobCardField, string>>;
-export const REQUIRED_MESSAGE = "This field is required to save";
+export const REQUIRED_MESSAGE = "This field is mandatory";
 
 const FUEL_LABEL: Record<(typeof FUEL_LEVELS)[number], string> = { E: "E", "1/4": "¼", "1/2": "½", "3/4": "¾", F: "F" };
 

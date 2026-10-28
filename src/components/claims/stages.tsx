@@ -14,9 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/popover";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/primitives";
 import { IntakeFields, intakeOf, validateIntake } from "./intake";
-import { JobCardSheet, REQUIRED_MESSAGE, type JobCardErrors, type JobCardForm } from "./job-card";
+import { JobCardSheet, type JobCardErrors, type JobCardForm } from "./job-card";
 import { useSla } from "./sla";
-import { Fact, Section } from "./ui";
+import { Fact, Flag, MANDATORY, Section, useStageValidation } from "./ui";
 
 export interface PanelProps {
   claim: Claim;
@@ -146,18 +146,34 @@ function Stage1({ claim, readOnly }: PanelProps) {
   const { save, finish } = useActions(claim);
   const [draft, setDraft] = useState(() => intakeOf(claim));
   const missing = missingFor({ ...claim, ...draft });
+  const v = useStageValidation();
+  const errors = validateIntake(draft);
+  const invalid = Object.keys(errors).length > 0;
   return (
-    <>
-      <IntakeFields value={draft} onChange={setDraft} errors={validateIntake(draft)} readOnly={readOnly} />
+    <div ref={v.root}>
+      <IntakeFields value={draft} onChange={setDraft} errors={v.showErrors ? errors : {}} readOnly={readOnly} />
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => save(draft, "Intake details saved")}>Save</Button>
-          <Button variant="primary" onClick={() => finish(draft)}>
+          <Button
+            onClick={() => {
+              v.flag(invalid);
+              save(draft, "Intake details saved");
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              v.flag(invalid || missing.length > 0);
+              finish(draft);
+            }}
+          >
             Complete Stage 1
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -173,45 +189,29 @@ function Stage2({ claim, readOnly }: PanelProps) {
   });
   const patch = { jobCardNo: form.jobCardNo.trim(), claimNo: form.claimNo.trim(), chassisNo: form.chassisNo.trim().toUpperCase(), odometer: form.odometer, damage: form.damage, jobCard: form.jc };
   const missing = missingFor({ ...claim, ...patch });
-  // Red highlighting only starts once the user has tried to save. It is derived from the live form, so a field clears the moment it is filled.
-  const [showValidationErrors, setShowValidationErrors] = useState(false);
+  // Red highlighting only starts once the user has tried to save; it is derived from the live form, so a field clears as soon as it is filled.
+  const v = useStageValidation();
   const errors: JobCardErrors = {};
-  if (showValidationErrors) {
-    if (!patch.jobCardNo) errors.jobCardNo = REQUIRED_MESSAGE;
-    if (!patch.claimNo) errors.claimNo = REQUIRED_MESSAGE;
-    if (!form.jc.bay) errors.bay = REQUIRED_MESSAGE;
-    if (!form.jc.receivedAt) errors.receivedAt = REQUIRED_MESSAGE;
-    if (!form.jc.promisedAt) errors.promisedAt = REQUIRED_MESSAGE;
+  if (v.showErrors) {
+    if (!patch.jobCardNo) errors.jobCardNo = MANDATORY;
+    if (!patch.claimNo) errors.claimNo = MANDATORY;
+    if (!form.jc.bay) errors.bay = MANDATORY;
+    if (!form.jc.receivedAt) errors.receivedAt = MANDATORY;
+    if (!form.jc.promisedAt) errors.promisedAt = MANDATORY;
     else if (form.jc.receivedAt && form.jc.promisedAt <= form.jc.receivedAt) errors.promisedAt = "Promised delivery must be after the receiving time";
-    if (!patch.chassisNo) errors.chassisNo = REQUIRED_MESSAGE;
-    if (!patch.odometer.trim()) errors.odometer = REQUIRED_MESSAGE;
-    if (!form.jc.supervisor.trim()) errors.supervisor = REQUIRED_MESSAGE;
+    if (!patch.chassisNo) errors.chassisNo = MANDATORY;
+    if (!patch.odometer.trim()) errors.odometer = MANDATORY;
+    if (!form.jc.supervisor.trim()) errors.supervisor = MANDATORY;
   }
-  const sheet = useRef<HTMLDivElement>(null);
-  /** Turn on the red highlights, then shake and scroll to the first invalid field (in form order, top to bottom). */
-  const flagInvalid = () => {
-    setShowValidationErrors(true);
-    if (!missing.length) return;
-    // Wait a frame so the invalid markers are in the DOM.
-    requestAnimationFrame(() => {
-      const first = sheet.current?.querySelector<HTMLElement>("[data-invalid]");
-      if (!first) return;
-      first.scrollIntoView({ behavior: "smooth", block: "center" });
-      first.classList.remove("field-shake");
-      void first.offsetWidth;
-      first.classList.add("field-shake");
-      first.querySelector<HTMLElement>("input,select")?.focus({ preventScroll: true });
-    });
-  };
   return (
     <>
-      <div ref={sheet}>
+      <div ref={v.root}>
       <JobCardSheet errors={errors} claim={claim} value={form} onChange={setForm} readOnly={readOnly} onAutoJobNo={() => setForm({ ...form, jobCardNo: nextJobCardNo(claims) })} onAutoClaimNo={() => setForm({ ...form, claimNo: nextClaimNo(claims) })} canAutoClaimNo={!form.claimNo || form.claimNo !== claim.claimNo} />
       </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => { flagInvalid(); save(patch, "Job card saved"); }}>Save</Button>
-          <Button variant="primary" onClick={() => { flagInvalid(); finish(patch); }}>
+          <Button onClick={() => { v.flag(missing.length > 0); save(patch, "Job card saved"); }}>Save</Button>
+          <Button variant="primary" onClick={() => { v.flag(missing.length > 0); finish(patch); }}>
             Save job card & continue to Estimation
           </Button>
         </Footer>
@@ -228,9 +228,13 @@ function Stage3({ claim, readOnly }: PanelProps) {
   const patch = { estimate: est };
   const missing = missingFor({ ...claim, ...patch });
   const setLine = (id: string, p: Partial<EstimateLine>) => setEst({ ...est, lines: est.lines.map((l) => (l.id === id ? { ...l, ...p } : l)) });
+  const v = useStageValidation();
+  const noLines = v.showErrors && !est.lines.some((l) => l.amount > 0);
+  const noDate = v.showErrors && !est.intimationDate;
   return (
-    <>
+    <div ref={v.root}>
       <Section title="Estimate breakdown" hint={`Total ${formatINR(estimateTotal({ estimate: est }))}`}>
+        <Flag error={noLines && "⚠️ At least one line item with an amount is required to complete this stage"}>
         <div className="space-y-2">
           {est.lines.map((l) => (
             <div key={l.id} className="grid grid-cols-[104px_1fr_110px_auto] items-center gap-2 max-sm:grid-cols-[1fr_96px_auto]">
@@ -248,17 +252,18 @@ function Stage3({ claim, readOnly }: PanelProps) {
           ))}
           {!est.lines.length && <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-[12.5px] text-faint">No estimate lines yet.</p>}
           {!readOnly && (
-            <Button size="sm" leading={<Plus className="h-3 w-3" />} onClick={() => setEst({ ...est, lines: [...est.lines, { id: `l${Date.now().toString(36)}`, category: "Parts", description: "", amount: 0 }] })}>
+            <Button size="sm" className={cn(noLines && "animate-pulse ring-2 ring-red-500 ring-offset-1")} leading={<Plus className="h-3 w-3" />} onClick={() => setEst({ ...est, lines: [...est.lines, { id: `l${Date.now().toString(36)}`, category: "Parts", description: "", amount: 0 }] })}>
               Add line
             </Button>
           )}
         </div>
+        </Flag>
       </Section>
       <div className="mt-5">
         <Section title="Insurance intimation" hint={claim.insurer ? `Insurer: ${claim.insurer}` : undefined}>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Intimation date" required>
-              <Input type="date" value={est.intimationDate} onChange={(e) => setEst({ ...est, intimationDate: e.target.value })} disabled={readOnly} />
+            <Field label="Intimation date" required error={noDate ? MANDATORY : undefined}>
+              <Input type="date" invalid={noDate} value={est.intimationDate} onChange={(e) => setEst({ ...est, intimationDate: e.target.value })} disabled={readOnly} />
             </Field>
             <Field label="Mode">
               <Select<string> value={est.intimationMode} onChange={(v) => setEst({ ...est, intimationMode: v as typeof est.intimationMode })} disabled={readOnly} options={INTIMATION_MODES.map((m) => ({ value: m, label: m }))} />
@@ -279,13 +284,26 @@ function Stage3({ claim, readOnly }: PanelProps) {
       </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => save(patch, "Estimate saved")}>Save</Button>
-          <Button variant="primary" onClick={() => finish(patch)}>
+          <Button
+            onClick={() => {
+              v.flag(missing.length > 0);
+              save(patch, "Estimate saved");
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              v.flag(missing.length > 0);
+              finish(patch);
+            }}
+          >
             Complete Stage 3
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -299,17 +317,22 @@ function Stage4({ claim, readOnly }: PanelProps) {
   // The report is uploaded straight away, so always merge onto the live survey record rather than a stale copy.
   const patch = { survey: { ...claim.survey, ...s } };
   const missing = missingFor({ ...claim, ...patch });
+  const v = useStageValidation();
+  const noSurveyor = v.showErrors && !s.surveyor.trim();
+  const notVisited = v.showErrors && s.visit !== "Visited";
+  const noReport = v.showErrors && !claim.survey.report;
+  const notApproved = v.showErrors && s.approval !== "Approved";
   return (
-    <>
+    <div ref={v.root}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Surveyor name" required>
-          <Input value={s.surveyor} onChange={(e) => setS({ ...s, surveyor: e.target.value })} disabled={readOnly} />
+        <Field label="Surveyor name" required error={noSurveyor ? MANDATORY : undefined}>
+          <Input invalid={noSurveyor} value={s.surveyor} onChange={(e) => setS({ ...s, surveyor: e.target.value })} disabled={readOnly} />
         </Field>
         <Field label="Surveyor phone" hint="Optional">
           <Input value={s.phone} onChange={(e) => setS({ ...s, phone: e.target.value })} inputMode="tel" disabled={readOnly} />
         </Field>
-        <Field label="Visit status" required>
-          <Select<string> value={s.visit} onChange={(v) => setS({ ...s, visit: v as typeof s.visit })} disabled={readOnly} options={VISIT_STATUSES.map((v) => ({ value: v, label: v }))} />
+        <Field label="Visit status" required error={notVisited ? "Mark the surveyor visit as Visited" : undefined}>
+          <Select<string> invalid={notVisited} value={s.visit} onChange={(val) => setS({ ...s, visit: val as typeof s.visit })} disabled={readOnly} options={VISIT_STATUSES.map((v) => ({ value: v, label: v }))} />
         </Field>
         <Field label="Visit date">
           <Input type="date" value={s.visitDate} onChange={(e) => setS({ ...s, visitDate: e.target.value })} disabled={readOnly} />
@@ -320,9 +343,12 @@ function Stage4({ claim, readOnly }: PanelProps) {
       </div>
       <div className="mt-5 space-y-4">
         <Section title="Survey report">
-          <FilePicker claim={claim} slot="survey" file={claim.survey.report} label="Survey report" accept="application/pdf,image/*" readOnly={readOnly} />
+          <Flag error={noReport && "This field is mandatory: upload the survey report"}>
+            <FilePicker claim={claim} slot="survey" file={claim.survey.report} label="Survey report" accept="application/pdf,image/*" readOnly={readOnly} />
+          </Flag>
         </Section>
         <Section title="Report approval">
+          <Flag error={notApproved && "The survey report must be marked Approved to complete this stage"}>
           <fieldset className="flex flex-wrap gap-2">
             <legend className="sr-only">Report approval</legend>
             {APPROVALS.map((a) => (
@@ -339,17 +365,31 @@ function Stage4({ claim, readOnly }: PanelProps) {
               </label>
             ))}
           </fieldset>
+          </Flag>
         </Section>
       </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => save(patch, "Survey details saved")}>Save</Button>
-          <Button variant="primary" onClick={() => finish(patch)}>
+          <Button
+            onClick={() => {
+              v.flag(missing.length > 0);
+              save(patch, "Survey details saved");
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              v.flag(missing.length > 0);
+              finish(patch);
+            }}
+          >
             Complete Stage 4
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -364,8 +404,10 @@ function Stage5({ claim, readOnly }: PanelProps) {
   const ordered = !!claim.parts.orderNo && claim.parts.orderedAt !== null;
   const partsLines = claim.estimate.lines.filter((l) => l.category === "Parts");
   const etaAt = claim.parts.orderedAt ? claim.parts.orderedAt + claim.parts.etaDays * 24 * 3_600_000 : null;
+  const v = useStageValidation();
+  const noOrder = v.showErrors && !ordered && !orderNo.trim();
   return (
-    <>
+    <div ref={v.root}>
       <Section title="Parts to order" hint="From the approved estimate">
         {partsLines.length ? (
           <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
@@ -392,8 +434,8 @@ function Stage5({ claim, readOnly }: PanelProps) {
             </dl>
           ) : (
             <div className="grid gap-4 sm:grid-cols-[1fr_200px_auto] sm:items-end">
-              <Field label="Yamaha order no." required>
-                <Input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="YMD-PO-000000" className="font-mono" disabled={readOnly} />
+              <Field label="Yamaha order no." required error={noOrder ? MANDATORY : undefined}>
+                <Input invalid={noOrder} value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="YMD-PO-000000" className="font-mono" disabled={readOnly} />
               </Field>
               <Field label="Transit ETA" hint={`Max ${SLA.maxTransitDays} days`}>
                 <Select<string> value={eta} onChange={setEta} disabled={readOnly} options={Array.from({ length: SLA.maxTransitDays }, (_, i) => ({ value: String(i + 1), label: `${i + 1} day${i ? "s" : ""}` }))} />
@@ -402,6 +444,7 @@ function Stage5({ claim, readOnly }: PanelProps) {
                 <Button
                   variant="primary"
                   onClick={() => {
+                    v.flag(!orderNo.trim());
                     if (placeOrder(claim.id, orderNo, Number(eta))) toast.success("Yamaha order recorded", "The 5-hour clock stops and the transit ETA clock starts.");
                     else toast.error("Enter the Yamaha order number first");
                   }}
@@ -417,12 +460,19 @@ function Stage5({ claim, readOnly }: PanelProps) {
 
       {!readOnly && (
         <Footer missing={missingFor(claim)}>
-          <Button variant="primary" disabled={!ordered} leading={<Truck className="h-3.5 w-3.5" />} onClick={() => finish()}>
+          <Button
+            variant="primary"
+            leading={<Truck className="h-3.5 w-3.5" />}
+            onClick={() => {
+              v.flag(!ordered);
+              finish();
+            }}
+          >
             Parts received at Central
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -433,16 +483,18 @@ function Stage6({ claim, readOnly }: PanelProps) {
   const [t, setT] = useState({ dispatchRef: claim.transit.dispatchRef, carrier: claim.transit.carrier });
   const patch = { transit: { ...claim.transit, ...t } };
   const missing = missingFor({ ...claim, ...patch });
+  const v = useStageValidation();
+  const noRef = v.showErrors && !t.dispatchRef.trim();
   return (
-    <>
+    <div ref={v.root}>
       <dl className="mb-5 grid gap-4 sm:grid-cols-3">
         <Fact label="Received at Central">{claim.parts.receivedAt ? fmtDateTime(claim.parts.receivedAt) : fmtDateTime(claim.stageEnteredAt)}</Fact>
         <Fact label="Yamaha order no." mono>{claim.parts.orderNo}</Fact>
         <Fact label="Reached branch">{claim.transit.reachedAt ? fmtDateTime(claim.transit.reachedAt) : "Not yet"}</Fact>
       </dl>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Dispatch reference" required hint="Vehicle no. or consignment no.">
-          <Input value={t.dispatchRef} onChange={(e) => setT({ ...t, dispatchRef: e.target.value })} className="font-mono" disabled={readOnly} />
+        <Field label="Dispatch reference" required hint="Vehicle no. or consignment no." error={noRef ? MANDATORY : undefined}>
+          <Input invalid={noRef} value={t.dispatchRef} onChange={(e) => setT({ ...t, dispatchRef: e.target.value })} className="font-mono" disabled={readOnly} />
         </Field>
         <Field label="Carrier" hint="Optional">
           <Input value={t.carrier} onChange={(e) => setT({ ...t, carrier: e.target.value })} placeholder="Branch pickup van, courier…" disabled={readOnly} />
@@ -450,13 +502,27 @@ function Stage6({ claim, readOnly }: PanelProps) {
       </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => save({ transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } }, "Dispatch recorded")}>Record dispatch</Button>
-          <Button variant="primary" leading={<Truck className="h-3.5 w-3.5" />} onClick={() => finish({ transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } })}>
+          <Button
+            onClick={() => {
+              v.flag(missing.length > 0);
+              save({ transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } }, "Dispatch recorded");
+            }}
+          >
+            Record dispatch
+          </Button>
+          <Button
+            variant="primary"
+            leading={<Truck className="h-3.5 w-3.5" />}
+            onClick={() => {
+              v.flag(missing.length > 0);
+              finish({ transit: { ...patch.transit, dispatchedAt: claim.transit.dispatchedAt ?? Date.now() } });
+            }}
+          >
             Parts reached the branch
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -465,10 +531,13 @@ function Stage6({ claim, readOnly }: PanelProps) {
 function Stage7({ claim, readOnly }: PanelProps) {
   const { finish } = useActions(claim);
   const missing = missingFor(claim);
+  const v = useStageValidation();
   return (
-    <>
+    <div ref={v.root}>
       <Section title="Ramp photo" hint="Sent to the customer when the repair starts">
-        <FilePicker claim={claim} slot="ramp" file={claim.work.ramp} label="Ramp photo" accept="image/*" image readOnly={readOnly} />
+        <Flag error={v.showErrors && !claim.work.ramp && "This field is mandatory: upload the ramp photo"}>
+          <FilePicker claim={claim} slot="ramp" file={claim.work.ramp} label="Ramp photo" accept="image/*" image readOnly={readOnly} />
+        </Flag>
       </Section>
       <div className="mt-5">
         <Section title="Customer notification" hint="Simulated">
@@ -487,12 +556,19 @@ function Stage7({ claim, readOnly }: PanelProps) {
       </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button variant="primary" leading={<Camera className="h-3.5 w-3.5" />} onClick={() => finish()}>
+          <Button
+            variant="primary"
+            leading={<Camera className="h-3.5 w-3.5" />}
+            onClick={() => {
+              v.flag(missing.length > 0);
+              finish();
+            }}
+          >
             Start repair & notify customer
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -503,9 +579,11 @@ function Stage8({ claim, readOnly }: PanelProps) {
   const set = useClaims((s) => s.set);
   const groups = ["Mechanical", "Body repair", "Painting"] as const;
   const done = claim.checklist.filter((i) => i.done).length;
-  const toggle = (id: string, v: boolean) => set(claim.id, { checklist: claim.checklist.map((i) => (i.id === id ? { ...i, done: v } : i)) });
+  const toggle = (id: string, done: boolean) => set(claim.id, { checklist: claim.checklist.map((i) => (i.id === id ? { ...i, done } : i)) });
+  const v = useStageValidation();
+  const open = claim.checklist.length - done;
   return (
-    <>
+    <div ref={v.root}>
       <div className="mb-4 flex items-center gap-3">
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-fg/10">
           <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${(done / claim.checklist.length) * 100}%` }} />
@@ -517,15 +595,16 @@ function Stage8({ claim, readOnly }: PanelProps) {
       <div className="grid gap-5 md:grid-cols-3">
         {groups.map((g) => {
           const items = claim.checklist.filter((i) => i.group === g);
+          const incomplete = v.showErrors && items.some((i) => !i.done);
           return (
-            <fieldset key={g} className="min-w-0 rounded-lg border border-line bg-surface p-3">
+            <fieldset key={g} data-invalid={incomplete ? "" : undefined} className={cn("min-w-0 rounded-lg border bg-surface p-3", incomplete ? "border-2 border-dashed border-red-500 bg-red-50/30 dark:bg-red-950/20" : "border-line")}>
               <legend className="px-1 text-[12px] font-semibold text-fg">
                 {g} <span className="font-normal text-faint">({items.filter((i) => i.done).length}/{items.length})</span>
               </legend>
               <ul className="space-y-2.5">
                 {items.map((i) => (
                   <li key={i.id} className="flex items-start gap-2.5">
-                    <span className="mt-0.5">{readOnly ? <Checkbox checked={i.done} onChange={() => undefined} label={i.label} className="pointer-events-none" /> : <Checkbox checked={i.done} onChange={(v) => toggle(i.id, v)} label={i.label} />}</span>
+                    <span className="mt-0.5">{readOnly ? <Checkbox checked={i.done} onChange={() => undefined} label={i.label} className="pointer-events-none" /> : <Checkbox checked={i.done} onChange={(val) => toggle(i.id, val)} label={i.label} />}</span>
                     <span className={cn("text-[12.5px] leading-5", i.done ? "text-muted line-through" : "text-fg")}>{i.label}</span>
                   </li>
                 ))}
@@ -534,14 +613,25 @@ function Stage8({ claim, readOnly }: PanelProps) {
           );
         })}
       </div>
+      {v.showErrors && open > 0 && (
+        <p role="alert" className="mt-3 text-[12px] font-medium text-red-600 dark:text-red-400">
+          ⚠️ {open} checklist item{open === 1 ? "" : "s"} still open. Tick every item to complete this stage.
+        </p>
+      )}
       {!readOnly && (
         <Footer missing={missingFor(claim)}>
-          <Button variant="primary" onClick={() => finish()}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              v.flag(open > 0);
+              finish();
+            }}
+          >
             Mark repair complete
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 
@@ -555,13 +645,24 @@ function Stage9({ claim, readOnly }: PanelProps) {
   const payable = customerPayable(billing);
   const missing = missingFor({ ...claim, billing });
   const depTooHigh = (billing.depreciation ?? 0) > payable;
+  const v = useStageValidation();
+  const moneyError = (k: "total" | "insurance" | "dep") => {
+    if (!v.showErrors) return undefined;
+    if (k === "total" && !(billing.totalBill && billing.totalBill > 0)) return MANDATORY;
+    if (k === "insurance") {
+      if (billing.insuranceCredited === null) return MANDATORY;
+      if (billing.insuranceCredited > (billing.totalBill ?? 0)) return "Insurance credited cannot exceed the total bill";
+    }
+    return undefined;
+  };
+  const unpaid = v.showErrors && payable > 0 && !f.paid;
   const money = (k: "total" | "insurance" | "dep", label: string, hint?: string, required?: boolean) => (
-    <Field label={label} hint={hint} required={required}>
-      <Input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} inputMode="numeric" placeholder="₹ 0" disabled={readOnly} invalid={k === "dep" && depTooHigh} />
+    <Field label={label} hint={hint} required={required} error={moneyError(k)}>
+      <Input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} inputMode="numeric" placeholder="₹ 0" disabled={readOnly} invalid={!!moneyError(k) || (k === "dep" && depTooHigh)} />
     </Field>
   );
   return (
-    <>
+    <div ref={v.root}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Invoice no." hint="Optional">
           <Input value={f.invoiceNo} onChange={(e) => setF({ ...f, invoiceNo: e.target.value })} className="font-mono" disabled={readOnly} />
@@ -587,20 +688,34 @@ function Stage9({ claim, readOnly }: PanelProps) {
         <Field label="Payment reference" hint="UPI / cash / cheque">
           <Input value={f.paymentRef} onChange={(e) => setF({ ...f, paymentRef: e.target.value })} disabled={readOnly} />
         </Field>
-        <div className="flex h-9 items-center gap-2.5 text-[13px] text-fg">
+        <div data-invalid={unpaid ? "" : undefined} className={cn("flex h-9 items-center gap-2.5 text-[13px] text-fg", unpaid && "rounded-md border-2 border-dashed border-red-500 bg-red-50/30 px-2 dark:bg-red-950/20")}>
           {readOnly ? <Checkbox checked={f.paid} onChange={() => undefined} label="Balance collected" className="pointer-events-none" /> : <Checkbox checked={f.paid} onChange={(v) => setF({ ...f, paid: v })} label="Balance collected" />}
           <span>{payable > 0 ? `Customer balance of ${formatINR(payable)} collected` : "No balance to collect"}</span>
         </div>
       </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => save({ billing }, "Billing saved")}>Save</Button>
-          <Button variant="primary" disabled={depTooHigh} onClick={() => finish({ billing })}>
+          <Button
+            onClick={() => {
+              v.flag(missing.length > 0);
+              save({ billing }, "Billing saved");
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            variant="primary"
+            disabled={depTooHigh}
+            onClick={() => {
+              v.flag(missing.length > 0);
+              finish({ billing });
+            }}
+          >
             Complete Stage 9
           </Button>
         </Footer>
       )}
-    </>
+    </div>
   );
 }
 

@@ -55,7 +55,7 @@ export function Avatar({ name, initials, size = 24, className, src }: { name?: s
 /* ───────── Form controls ───────── */
 export function Field({ label, hint, error, children, className, required }: { label: string; hint?: string; error?: string; children: ReactNode; className?: string; required?: boolean }) {
   return (
-    <label className={cn("block", className)}>
+    <label className={cn("block", className)} data-invalid={error ? "" : undefined}>
       <span className="mb-1.5 flex items-center justify-between text-xs font-medium text-fg">
         <span>
           {label}
@@ -82,7 +82,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
         className={cn(
           "h-9 w-full rounded-md border border-line bg-surface px-2.5 text-[13px] text-fg shadow-card outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-strong disabled:opacity-50",
           leading && "pl-8",
-          invalid && "!border-red-500 focus:ring-2 focus:ring-red-500/40",
+          invalid && "!border-red-500 !bg-red-50/50 focus:!border-red-600 focus:ring-2 focus:ring-red-500/30 dark:!bg-red-950/25",
           className,
         )}
         {...props}
@@ -123,7 +123,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   return (
     <textarea
       ref={ref}
-      className={cn("min-h-[76px] w-full resize-y rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] leading-5 text-fg shadow-card outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-strong disabled:opacity-50", invalid && "!border-red-500 focus:ring-2 focus:ring-red-500/40", className)}
+      className={cn("min-h-[76px] w-full resize-y rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] leading-5 text-fg shadow-card outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-strong disabled:opacity-50", invalid && "!border-red-500 !bg-red-50/50 focus:!border-red-600 focus:ring-2 focus:ring-red-500/30 dark:!bg-red-950/25", className)}
       {...props}
     />
   );
