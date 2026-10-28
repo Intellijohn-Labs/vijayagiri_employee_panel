@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/popover";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/primitives";
 import { IntakeFields, intakeOf, validateIntake } from "./intake";
-import { JobCardSheet, type JobCardForm } from "./job-card";
+import { JobCardSheet, REQUIRED_MESSAGE, type JobCardErrors, type JobCardForm } from "./job-card";
 import { useSla } from "./sla";
 import { Fact, Section } from "./ui";
 
@@ -173,13 +173,45 @@ function Stage2({ claim, readOnly }: PanelProps) {
   });
   const patch = { jobCardNo: form.jobCardNo.trim(), claimNo: form.claimNo.trim(), chassisNo: form.chassisNo.trim().toUpperCase(), odometer: form.odometer, damage: form.damage, jobCard: form.jc };
   const missing = missingFor({ ...claim, ...patch });
+  // Red highlighting only starts once the user has tried to save. It is derived from the live form, so a field clears the moment it is filled.
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const errors: JobCardErrors = {};
+  if (showValidationErrors) {
+    if (!patch.jobCardNo) errors.jobCardNo = REQUIRED_MESSAGE;
+    if (!patch.claimNo) errors.claimNo = REQUIRED_MESSAGE;
+    if (!form.jc.bay) errors.bay = REQUIRED_MESSAGE;
+    if (!form.jc.receivedAt) errors.receivedAt = REQUIRED_MESSAGE;
+    if (!form.jc.promisedAt) errors.promisedAt = REQUIRED_MESSAGE;
+    else if (form.jc.receivedAt && form.jc.promisedAt <= form.jc.receivedAt) errors.promisedAt = "Promised delivery must be after the receiving time";
+    if (!patch.chassisNo) errors.chassisNo = REQUIRED_MESSAGE;
+    if (!patch.odometer.trim()) errors.odometer = REQUIRED_MESSAGE;
+    if (!form.jc.supervisor.trim()) errors.supervisor = REQUIRED_MESSAGE;
+  }
+  const sheet = useRef<HTMLDivElement>(null);
+  /** Turn on the red highlights, then shake and scroll to the first invalid field (in form order, top to bottom). */
+  const flagInvalid = () => {
+    setShowValidationErrors(true);
+    if (!missing.length) return;
+    // Wait a frame so the invalid markers are in the DOM.
+    requestAnimationFrame(() => {
+      const first = sheet.current?.querySelector<HTMLElement>("[data-invalid]");
+      if (!first) return;
+      first.scrollIntoView({ behavior: "smooth", block: "center" });
+      first.classList.remove("field-shake");
+      void first.offsetWidth;
+      first.classList.add("field-shake");
+      first.querySelector<HTMLElement>("input,select")?.focus({ preventScroll: true });
+    });
+  };
   return (
     <>
-      <JobCardSheet claim={claim} value={form} onChange={setForm} readOnly={readOnly} onAutoJobNo={() => setForm({ ...form, jobCardNo: nextJobCardNo(claims) })} onAutoClaimNo={() => setForm({ ...form, claimNo: nextClaimNo(claims) })} canAutoClaimNo={!form.claimNo || form.claimNo !== claim.claimNo} />
+      <div ref={sheet}>
+      <JobCardSheet errors={errors} claim={claim} value={form} onChange={setForm} readOnly={readOnly} onAutoJobNo={() => setForm({ ...form, jobCardNo: nextJobCardNo(claims) })} onAutoClaimNo={() => setForm({ ...form, claimNo: nextClaimNo(claims) })} canAutoClaimNo={!form.claimNo || form.claimNo !== claim.claimNo} />
+      </div>
       {!readOnly && (
         <Footer missing={missing}>
-          <Button onClick={() => save(patch, "Job card saved")}>Save</Button>
-          <Button variant="primary" onClick={() => finish(patch)}>
+          <Button onClick={() => { flagInvalid(); save(patch, "Job card saved"); }}>Save</Button>
+          <Button variant="primary" onClick={() => { flagInvalid(); finish(patch); }}>
             Save job card & continue to Estimation
           </Button>
         </Footer>

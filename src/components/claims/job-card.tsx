@@ -15,19 +15,37 @@ export interface JobCardForm {
   jc: JobCard;
 }
 
+/** The Stage 2 fields that must be filled before saving, and the message to show under each when left empty. */
+export type JobCardField = "jobCardNo" | "claimNo" | "bay" | "receivedAt" | "promisedAt" | "chassisNo" | "odometer" | "supervisor";
+export type JobCardErrors = Partial<Record<JobCardField, string>>;
+export const REQUIRED_MESSAGE = "This field is required to save";
+
 const FUEL_LABEL: Record<(typeof FUEL_LEVELS)[number], string> = { E: "E", "1/4": "¼", "1/2": "½", "3/4": "¾", F: "F" };
 
 /* The sheet is a printed form: always dark ink on white, in either theme. */
 const line = "w-full min-w-0 border-0 border-b border-neutral-400 bg-transparent px-0.5 py-0.5 text-[13px] text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-blue-700 disabled:cursor-default disabled:border-transparent [color-scheme:light]";
+const invalidLine = "!border-red-500 bg-red-50/50 focus:!border-red-600 focus:ring-2 focus:ring-red-500/20 dark:bg-red-950/20";
 const cell = "border-b border-r border-neutral-400 p-2";
 const bar = "border-b border-neutral-400 bg-neutral-100 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider text-neutral-700";
 
-function Cell({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+function Cell({ label, children, className, error, field }: { label: string; children: ReactNode; className?: string; error?: string; field?: JobCardField }) {
   return (
-    <div className={cn(cell, className)}>
+    <div className={cn(cell, className)} data-field={field} data-invalid={error ? "" : undefined}>
       <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{label}</p>
       {children}
+      {error && <p role="alert" className="mt-1 text-[11px] text-red-600">{error}</p>}
     </div>
+  );
+}
+
+/** Label + input for the compact staff / particulars blocks, with the same red treatment as `Cell`. */
+function Labelled({ label, error, field, className, children }: { label: string; error?: string; field?: JobCardField; className?: string; children: ReactNode }) {
+  return (
+    <label className={cn("block", className)} data-field={field} data-invalid={error ? "" : undefined}>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{label}</span>
+      {children}
+      {error && <span role="alert" className="mt-1 block text-[11px] text-red-600">{error}</span>}
+    </label>
   );
 }
 
@@ -93,8 +111,9 @@ function FuelGauge({ value, onChange, disabled }: { value: JobCard["fuel"]; onCh
  * The Vijayagiri Yamaha Job Card (Ver 2.1) as a paper form: header, meta and schedule strip, then repairs and
  * estimate on the left and the vehicle's particulars, check-in and staff on the right.
  */
-export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, onAutoClaimNo, canAutoClaimNo }: { claim: Claim; value: JobCardForm; onChange: (v: JobCardForm) => void; readOnly?: boolean; onAutoJobNo: () => void; onAutoClaimNo: () => void; canAutoClaimNo: boolean }) {
+export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, onAutoClaimNo, canAutoClaimNo, errors = {} }: { errors?: JobCardErrors; claim: Claim; value: JobCardForm; onChange: (v: JobCardForm) => void; readOnly?: boolean; onAutoJobNo: () => void; onAutoClaimNo: () => void; canAutoClaimNo: boolean }) {
   const { jc } = value;
+  const bad = (k: JobCardField) => (errors[k] ? invalidLine : undefined);
   const setJc = (p: Partial<JobCard>) => onChange({ ...value, jc: { ...jc, ...p } });
   const set = (p: Partial<JobCardForm>) => onChange({ ...value, ...p });
   const money = (k: "estParts" | "estLabour", label: string) => (
@@ -136,8 +155,8 @@ export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, on
 
       {/* Meta & schedule strip */}
       <div className="mt-4 grid grid-cols-2 border-l border-t border-neutral-400 md:grid-cols-10">
-        <Cell label="Bay No" className="md:col-span-2">
-          <select value={jc.bay} disabled={readOnly} onChange={(e) => setJc({ bay: e.target.value })} className={cn(line, "py-[3px]")} aria-label="Bay number">
+        <Cell label="Bay No" className="md:col-span-2" field="bay" error={errors.bay}>
+          <select value={jc.bay} disabled={readOnly} onChange={(e) => setJc({ bay: e.target.value })} className={cn(line, "py-[3px]", bad("bay"))} aria-label="Bay number">
             <option value="">Select bay</option>
             {JOB_BAYS.map((b) => (
               <option key={b} value={b}>
@@ -155,9 +174,9 @@ export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, on
         <Cell label="PP" className="md:col-span-1">
           <Tick checked={jc.pp} onChange={(v) => setJc({ pp: v })} label="Yes" disabled={readOnly} />
         </Cell>
-        <Cell label="Job Card No" className="col-span-2 md:col-span-4">
+        <Cell label="Job Card No" className="col-span-2 md:col-span-4" field="jobCardNo" error={errors.jobCardNo}>
           <div className="flex items-center gap-2">
-            <input value={value.jobCardNo} disabled={readOnly} onChange={(e) => set({ jobCardNo: e.target.value })} placeholder="JC/10353/2026-27/0481" className={cn(line, "font-mono")} aria-label="Job card number" />
+            <input value={value.jobCardNo} disabled={readOnly} onChange={(e) => set({ jobCardNo: e.target.value })} placeholder="JC/10353/2026-27/0481" className={cn(line, "font-mono", bad("jobCardNo"))} aria-label="Job card number" />
             {auto(onAutoJobNo)}
           </div>
         </Cell>
@@ -168,14 +187,14 @@ export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, on
         <Cell label="Vehicle Reg No" className="md:col-span-2">
           <PlateBadge regNo={claim.regNo} />
         </Cell>
-        <Cell label="Odometer Reading (KM)" className="md:col-span-2">
-          <input value={value.odometer} disabled={readOnly} inputMode="numeric" onChange={(e) => set({ odometer: e.target.value.replace(/[^\d]/g, "") })} placeholder="e.g. 4200" className={cn(line, "tabular-nums")} aria-label="Odometer reading in kilometres" />
+        <Cell label="Odometer Reading (KM)" className="md:col-span-2" field="odometer" error={errors.odometer}>
+          <input value={value.odometer} disabled={readOnly} inputMode="numeric" onChange={(e) => set({ odometer: e.target.value.replace(/[^\d]/g, "") })} placeholder="e.g. 4200" className={cn(line, "tabular-nums", bad("odometer"))} aria-label="Odometer reading in kilometres" />
         </Cell>
-        <Cell label="Vehicle Receiving Date / Time" className="col-span-2 md:col-span-2">
-          <input type="datetime-local" value={jc.receivedAt} disabled={readOnly} onChange={(e) => setJc({ receivedAt: e.target.value })} className={line} aria-label="Vehicle receiving date and time" />
+        <Cell label="Vehicle Receiving Date / Time" className="col-span-2 md:col-span-2" field="receivedAt" error={errors.receivedAt}>
+          <input type="datetime-local" value={jc.receivedAt} disabled={readOnly} onChange={(e) => setJc({ receivedAt: e.target.value })} className={cn(line, bad("receivedAt"))} aria-label="Vehicle receiving date and time" />
         </Cell>
-        <Cell label="Promised Ready For Delivery" className="col-span-2 md:col-span-2">
-          <input type="datetime-local" value={jc.promisedAt} min={jc.receivedAt || undefined} disabled={readOnly} onChange={(e) => setJc({ promisedAt: e.target.value })} className={line} aria-label="Promised delivery date and time" />
+        <Cell label="Promised Ready For Delivery" className="col-span-2 md:col-span-2" field="promisedAt" error={errors.promisedAt}>
+          <input type="datetime-local" value={jc.promisedAt} min={jc.receivedAt || undefined} disabled={readOnly} onChange={(e) => setJc({ promisedAt: e.target.value })} className={cn(line, bad("promisedAt"))} aria-label="Promised delivery date and time" />
         </Cell>
 
         <Cell label="Job Type" className="col-span-2 md:col-span-4">
@@ -184,9 +203,9 @@ export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, on
         <Cell label="Telephonic Reminder" className="md:col-span-2">
           <YesNo value={jc.telReminder} onChange={(v) => setJc({ telReminder: v })} label="Telephonic reminder" disabled={readOnly} />
         </Cell>
-        <Cell label="Claim No (Insurance)" className="col-span-2 md:col-span-4">
+        <Cell label="Claim No (Insurance)" className="col-span-2 md:col-span-4" field="claimNo" error={errors.claimNo}>
           <div className="flex items-center gap-2">
-            <input value={value.claimNo} disabled={readOnly} onChange={(e) => set({ claimNo: e.target.value })} placeholder="VAA/CLM/26-27/0041" className={cn(line, "font-mono")} aria-label="Official claim number" />
+            <input value={value.claimNo} disabled={readOnly} onChange={(e) => set({ claimNo: e.target.value })} placeholder="VAA/CLM/26-27/0041" className={cn(line, "font-mono", bad("claimNo"))} aria-label="Official claim number" />
             {auto(onAutoClaimNo, !canAutoClaimNo)}
           </div>
         </Cell>
@@ -242,10 +261,9 @@ export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, on
         <section aria-label="Vehicle, check-in and staff">
           <h4 className={bar}>Technical particulars</h4>
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-b border-neutral-400 px-2.5 py-2">
-            <label className="col-span-2 block">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Frame / chassis no</span>
-              <input value={value.chassisNo} disabled={readOnly} maxLength={17} onChange={(e) => set({ chassisNo: e.target.value.toUpperCase() })} placeholder="17 characters" className={cn(line, "font-mono uppercase tracking-wide")} />
-            </label>
+            <Labelled label="Frame / chassis no" className="col-span-2" field="chassisNo" error={errors.chassisNo}>
+              <input value={value.chassisNo} disabled={readOnly} maxLength={17} onChange={(e) => set({ chassisNo: e.target.value.toUpperCase() })} placeholder="17 characters" className={cn(line, "font-mono uppercase tracking-wide", bad("chassisNo"))} />
+            </Labelled>
             <label className="block">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Engine no</span>
               <input value={jc.engineNo} disabled={readOnly} onChange={(e) => setJc({ engineNo: e.target.value.toUpperCase() })} className={cn(line, "font-mono uppercase")} />
@@ -282,10 +300,9 @@ export function JobCardSheet({ claim, value, onChange, readOnly, onAutoJobNo, on
 
           <h4 className={bar}>Workshop staff</h4>
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 px-2.5 py-2">
-            <label className="block">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Supervisor name</span>
-              <input value={jc.supervisor} disabled={readOnly} onChange={(e) => setJc({ supervisor: e.target.value })} className={line} />
-            </label>
+            <Labelled label="Supervisor name" field="supervisor" error={errors.supervisor}>
+              <input value={jc.supervisor} disabled={readOnly} onChange={(e) => setJc({ supervisor: e.target.value })} className={cn(line, bad("supervisor"))} />
+            </Labelled>
             <label className="block">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">Mechanic name</span>
               <input value={jc.mechanic} disabled={readOnly} onChange={(e) => setJc({ mechanic: e.target.value })} className={line} />
