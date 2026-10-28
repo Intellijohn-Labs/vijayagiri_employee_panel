@@ -224,7 +224,9 @@ export default function LoginPage() {
       const scope = who.access !== "all" && who.access.length === 1 ? who.access[0] : "all";
       useEmployees.getState().signIn(who);
       useApp.getState().setBranchScope(scope, { silent: true });
-      router.push("/");
+      // Honour ?callbackUrl= when it is a path on this site; otherwise land on Claims & Workshop.
+      const next = new URLSearchParams(window.location.search).get("callbackUrl");
+      router.push(next && /^\/(?![/\\])/.test(next) && !next.startsWith("/login") ? next : "/claims");
     };
     if (reduced) return open();
     setPhase("check");
